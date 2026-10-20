@@ -1,0 +1,29 @@
+setup failed
+program not built with -cover
+FAIL	example.com/fx/mainfail	1.184s
+--- FAIL: TestPanics (0.00s)
+panic: assignment to entry in nil map [recovered, repanicked]
+
+goroutine 7 [running]:
+testing.tRunner.func1.2({0x7ff624a96ef8, 0x7ff624ad5690})
+	C:/Program Files/Go/src/testing/testing.go:2123 +0x239
+testing.tRunner.func1()
+	C:/Program Files/Go/src/testing/testing.go:2126 +0x329
+panic({0x7ff624a96ef8?, 0x7ff624ad5690?})
+	C:/Program Files/Go/src/runtime/panic.go:859 +0x125
+example.com/fx/panicking.TestPanics(0x1b8b50012400?)
+	C:/fx/panicking/p_test.go:7 +0x28
+testing.tRunner(0x1b8b50012400, 0x7ff624abab40)
+	C:/Program Files/Go/src/testing/testing.go:2193 +0xc3
+created by testing.(*T).Run in goroutine 1
+	C:/Program Files/Go/src/testing/testing.go:2258 +0x4b4
+FAIL	example.com/fx/panicking	1.329s
+    f_test.go:6: checking
+    f_test.go:8: Two() = 2, want 3
+--- FAIL: TestTwo (0.00s)
+FAIL
+    s_test.go:9: two is wrong
+--- FAIL: TestTable/two (0.00s)
+FAIL
+FAIL	example.com/fx/failtest	1.521s
+FAIL	example.com/fx/subtest	1.476s

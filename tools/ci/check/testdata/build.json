@@ -1,0 +1,15 @@
+{"ImportPath":"example.com/fx/buildfail [example.com/fx/buildfail.test]","Action":"build-output","Output":"# example.com/fx/buildfail [example.com/fx/buildfail.test]\n"}
+{"ImportPath":"example.com/fx/buildfail [example.com/fx/buildfail.test]","Action":"build-output","Output":"buildfail\\b.go:3:179: cannot use \"not an int\" (untyped string constant) as int value in return statement\n"}
+{"ImportPath":"example.com/fx/buildfail [example.com/fx/buildfail.test]","Action":"build-fail"}
+{"Time":"2026-10-14T19:48:04.5968647+02:00","Action":"start","Package":"example.com/fx/buildfail"}
+{"Time":"2026-10-14T19:48:04.5974031+02:00","Action":"output","Package":"example.com/fx/buildfail","Output":"FAIL\texample.com/fx/buildfail [build failed]\n","OutputType":"frame"}
+{"Time":"2026-10-14T19:48:04.5974031+02:00","Action":"fail","Package":"example.com/fx/buildfail","Elapsed":0.001,"FailedBuild":"example.com/fx/buildfail [example.com/fx/buildfail.test]"}
+{"Time":"2026-10-14T19:48:05.3016023+02:00","Action":"start","Package":"example.com/fx/pass"}
+{"Time":"2026-10-14T19:48:06.578288+02:00","Action":"run","Package":"example.com/fx/pass","Test":"TestAdd"}
+{"Time":"2026-10-14T19:48:06.579057+02:00","Action":"output","Package":"example.com/fx/pass","Test":"TestAdd","Output":"=== RUN   TestAdd\n","OutputType":"frame"}
+{"Time":"2026-10-14T19:48:06.579057+02:00","Action":"output","Package":"example.com/fx/pass","Test":"TestAdd","Output":"--- PASS: TestAdd (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-10-14T19:48:06.579057+02:00","Action":"pass","Package":"example.com/fx/pass","Test":"TestAdd","Elapsed":0}
+{"Time":"2026-10-14T19:48:06.579057+02:00","Action":"output","Package":"example.com/fx/pass","Output":"PASS\n","OutputType":"frame"}
+{"Time":"2026-10-14T19:48:06.6023539+02:00","Action":"output","Package":"example.com/fx/pass","Output":"coverage: 50.0% of statements\n"}
+{"Time":"2026-10-14T19:48:06.619345+02:00","Action":"output","Package":"example.com/fx/pass","Output":"ok  \texample.com/fx/pass\t1.303s\tcoverage: 50.0% of statements\n"}
+{"Time":"2026-10-14T19:48:06.619345+02:00","Action":"pass","Package":"example.com/fx/pass","Elapsed":1.318}

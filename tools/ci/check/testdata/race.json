@@ -1,0 +1,18 @@
+{"Time":"2026-10-14T20:01:00.0000000+02:00","Action":"start","Package":"example.com/fx/racy"}
+{"Time":"2026-10-14T20:01:01.0000000+02:00","Action":"run","Package":"example.com/fx/racy","Test":"TestCounter"}
+{"Time":"2026-10-14T20:01:01.0000000+02:00","Action":"output","Package":"example.com/fx/racy","Test":"TestCounter","Output":"=== RUN   TestCounter\n","OutputType":"frame"}
+{"Time":"2026-10-14T20:01:01.0100000+02:00","Action":"output","Package":"example.com/fx/racy","Test":"TestCounter","Output":"==================\n"}
+{"Time":"2026-10-14T20:01:01.0100000+02:00","Action":"output","Package":"example.com/fx/racy","Test":"TestCounter","Output":"WARNING: DATA RACE\n"}
+{"Time":"2026-10-14T20:01:01.0100000+02:00","Action":"output","Package":"example.com/fx/racy","Test":"TestCounter","Output":"Write at 0x00c000012345 by goroutine 8:\n"}
+{"Time":"2026-10-14T20:01:01.0100000+02:00","Action":"output","Package":"example.com/fx/racy","Test":"TestCounter","Output":"  example.com/fx/racy.TestCounter.func1()\n"}
+{"Time":"2026-10-14T20:01:01.0100000+02:00","Action":"output","Package":"example.com/fx/racy","Test":"TestCounter","Output":"      C:/fx/racy/r_test.go:12 +0x44\n"}
+{"Time":"2026-10-14T20:01:01.0100000+02:00","Action":"output","Package":"example.com/fx/racy","Test":"TestCounter","Output":"Previous write at 0x00c000012345 by goroutine 7:\n"}
+{"Time":"2026-10-14T20:01:01.0100000+02:00","Action":"output","Package":"example.com/fx/racy","Test":"TestCounter","Output":"  example.com/fx/racy.TestCounter()\n"}
+{"Time":"2026-10-14T20:01:01.0100000+02:00","Action":"output","Package":"example.com/fx/racy","Test":"TestCounter","Output":"      C:/fx/racy/r_test.go:15 +0x88\n"}
+{"Time":"2026-10-14T20:01:01.0100000+02:00","Action":"output","Package":"example.com/fx/racy","Test":"TestCounter","Output":"==================\n"}
+{"Time":"2026-10-14T20:01:01.0200000+02:00","Action":"output","Package":"example.com/fx/racy","Test":"TestCounter","Output":"    testing.go:1617: race detected during execution of test\n","OutputType":"error"}
+{"Time":"2026-10-14T20:01:01.0200000+02:00","Action":"output","Package":"example.com/fx/racy","Test":"TestCounter","Output":"--- FAIL: TestCounter (0.01s)\n","OutputType":"frame"}
+{"Time":"2026-10-14T20:01:01.0200000+02:00","Action":"fail","Package":"example.com/fx/racy","Test":"TestCounter","Elapsed":0.01}
+{"Time":"2026-10-14T20:01:01.0300000+02:00","Action":"output","Package":"example.com/fx/racy","Output":"FAIL\n","OutputType":"frame"}
+{"Time":"2026-10-14T20:01:01.0300000+02:00","Action":"output","Package":"example.com/fx/racy","Output":"FAIL\texample.com/fx/racy\t1.040s\n","OutputType":"frame"}
+{"Time":"2026-10-14T20:01:01.0300000+02:00","Action":"fail","Package":"example.com/fx/racy","Elapsed":1.04}

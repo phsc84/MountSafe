@@ -1,0 +1,7 @@
+# Coverage floors per package, in % of statements.
+# CI fails when a package falls below its floor. Raise a floor when a
+# package's coverage has risen for good; never lower one without a reason
+# in the commit. A new package gets its floor with its first tests.
+
+# The CI runner (SPEC-ci section 8).
+tools/ci/check                   90

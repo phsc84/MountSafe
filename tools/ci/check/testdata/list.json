@@ -1,0 +1,8 @@
+{"Time":"2026-10-14T19:48:08.4817687+02:00","Action":"start","Package":"example.com/fx/fuzzy"}
+{"Time":"2026-10-14T19:48:08.4817687+02:00","Action":"start","Package":"example.com/fx/pass"}
+{"Time":"2026-10-14T19:48:09.2814866+02:00","Action":"output","Package":"example.com/fx/pass","Output":"ok  \texample.com/fx/pass\t0.799s\n"}
+{"Time":"2026-10-14T19:48:09.2814866+02:00","Action":"pass","Package":"example.com/fx/pass","Elapsed":0.8}
+{"Time":"2026-10-14T19:48:09.85176+02:00","Action":"output","Package":"example.com/fx/fuzzy","Output":"FuzzOne\n"}
+{"Time":"2026-10-14T19:48:09.85176+02:00","Action":"output","Package":"example.com/fx/fuzzy","Output":"FuzzTwo\n"}
+{"Time":"2026-10-14T19:48:09.8557486+02:00","Action":"output","Package":"example.com/fx/fuzzy","Output":"ok  \texample.com/fx/fuzzy\t1.373s\n"}
+{"Time":"2026-10-14T19:48:09.8557486+02:00","Action":"pass","Package":"example.com/fx/fuzzy","Elapsed":1.374}

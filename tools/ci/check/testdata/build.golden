@@ -1,0 +1,4 @@
+# example.com/fx/buildfail [example.com/fx/buildfail.test]
+buildfail\b.go:3:179: cannot use "not an int" (untyped string constant) as int value in return statement
+FAIL	example.com/fx/buildfail [build failed]
+ok  	example.com/fx/pass	1.303s	coverage: 50.0% of statements

@@ -1,0 +1,73 @@
+# Checks every push to a branch on Windows, the only platform MountSafe
+# supports. Each commit runs once: there is no pull_request trigger, which
+# would run every job a second time for the release pull request from dev.
+# A pull request shows the checks of its newest commit, and the ruleset of
+# main requires them by name on that commit, whichever event ran them.
+# Each job's checks are one run of the CI runner, tools/ci, which runs the
+# same way locally: go run ./tools/ci <job> (docs/GUIDE-ci.md, docs/SPEC-ci.md).
+name: CI
+
+on:
+  push:
+    branches: ["**"] # branches only, not tags
+
+permissions:
+  contents: read
+
+jobs:
+  static:
+    name: "static: format, vet, build, analysis"
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - run: go run ./tools/ci -out "${{ runner.temp }}/ci" static
+
+  test:
+    name: "test: tests and coverage"
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - run: go run ./tools/ci -out "${{ runner.temp }}/ci" test
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: coverage
+          path: ${{ runner.temp }}/ci/test/cover.out
+
+  race:
+    name: "race: race detector"
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      # -race needs cgo and a gcc; the runner image has MinGW. Release builds
+      # stay CGO_ENABLED=0.
+      - run: go run ./tools/ci -out "${{ runner.temp }}/ci" race
+
+  fuzz:
+    name: "fuzz: fuzzing"
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      # A failing input lands in the package's testdata/fuzz/; download it
+      # from the artifact and commit it, so that go test runs it as a
+      # regression test from then on.
+      - run: go run ./tools/ci -out "${{ runner.temp }}/ci" fuzz
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: fuzz-failures
+          path: internal/**/testdata/fuzz/

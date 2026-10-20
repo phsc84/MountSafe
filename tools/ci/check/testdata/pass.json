@@ -1,0 +1,12 @@
+{"Time":"2026-10-14T19:47:45.653017+02:00","Action":"start","Package":"example.com/fx/pass"}
+{"Time":"2026-10-14T19:47:45.6559205+02:00","Action":"start","Package":"example.com/fx/notests"}
+{"Time":"2026-10-14T19:47:46.8329417+02:00","Action":"run","Package":"example.com/fx/pass","Test":"TestAdd"}
+{"Time":"2026-10-14T19:47:46.8347022+02:00","Action":"output","Package":"example.com/fx/pass","Test":"TestAdd","Output":"=== RUN   TestAdd\n","OutputType":"frame"}
+{"Time":"2026-10-14T19:47:46.8347022+02:00","Action":"output","Package":"example.com/fx/pass","Test":"TestAdd","Output":"--- PASS: TestAdd (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-10-14T19:47:46.83545+02:00","Action":"pass","Package":"example.com/fx/pass","Test":"TestAdd","Elapsed":0}
+{"Time":"2026-10-14T19:47:46.8360231+02:00","Action":"output","Package":"example.com/fx/pass","Output":"PASS\n","OutputType":"frame"}
+{"Time":"2026-10-14T19:47:46.8692329+02:00","Action":"output","Package":"example.com/fx/pass","Output":"coverage: 50.0% of statements\n"}
+{"Time":"2026-10-14T19:47:46.8873307+02:00","Action":"output","Package":"example.com/fx/pass","Output":"ok  \texample.com/fx/pass\t1.217s\tcoverage: 50.0% of statements\n"}
+{"Time":"2026-10-14T19:47:46.8873307+02:00","Action":"pass","Package":"example.com/fx/pass","Elapsed":1.234}
+{"Time":"2026-10-14T19:47:59.8250484+02:00","Action":"output","Package":"example.com/fx/notests","Output":"\texample.com/fx/notests\t\t"}
+{"Time":"2026-10-14T19:47:59.8250484+02:00","Action":"pass","Package":"example.com/fx/notests","Elapsed":14.169}

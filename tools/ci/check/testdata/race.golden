@@ -1,0 +1,13 @@
+==================
+WARNING: DATA RACE
+Write at 0x00c000012345 by goroutine 8:
+  example.com/fx/racy.TestCounter.func1()
+      C:/fx/racy/r_test.go:12 +0x44
+Previous write at 0x00c000012345 by goroutine 7:
+  example.com/fx/racy.TestCounter()
+      C:/fx/racy/r_test.go:15 +0x88
+==================
+    testing.go:1617: race detected during execution of test
+--- FAIL: TestCounter (0.01s)
+FAIL
+FAIL	example.com/fx/racy	1.040s
