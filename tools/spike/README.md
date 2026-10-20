@@ -129,7 +129,14 @@ must show `PASS` for "a second open for writing is refused" and "the holder can 
 
 In c the holder is in the Sandbox, because cutting the PC's network would cut the Sandbox's too. After the result, the Sandbox's network comes back with `Get-NetAdapter | Enable-NetAdapter`; note what its `lock-hold` prints then: whether the heartbeat works again, re-opens, or finds the lock taken by the PC (core spec 6.6 expects MountSafe to switch the vault to read-only then).
 
-**d. The same PC after a network drop** (the case with one PC): on the PC, `& $S lock-hold -file "$D\vault.lock" -heartbeat 2s`; pull the network cable or turn Wi-Fi off for about a minute, then reconnect. Note what `lock-hold` prints. The question is whether MountSafe can take its own lock back after a drop, or whether the Mac still holds the old open and refuses the re-open with a sharing violation, possibly for a while. Core spec 6.6 assumes the re-open works when nobody else took the lock.
+**d. The same PC after a network drop** (the case with one PC). The first run (2026-10-20) showed that the Mac keeps the old open after a drop and refuses this PC's own re-open with a sharing violation. Two questions remain: does the original handle come back if it is kept open (SMB durable handles), and how long does the Mac keep the old open?
+
+1. `& $S lock-hold -file "$D\vault.lock" -heartbeat 2s`
+2. Pull the network cable or turn Wi-Fi off for about a minute, then reconnect.
+3. **Leave it running** until it prints a `PASS` line, or for 10 minutes. It retries on the original handle for 3 minutes (`-keep`); if that does not come back, it re-opens and reports how long the Mac refused that.
+4. Repeat with a drop of about 10 seconds.
+
+Core spec 6.6 is changed according to the answers.
 
 ## 5. Throughput (core spec D4)
 

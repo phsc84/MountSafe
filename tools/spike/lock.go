@@ -32,10 +32,17 @@ func writeAt(h windows.Handle, b []byte) error {
 
 // runLockHold holds the lock like a mount does and writes a heartbeat into
 // it, so a lost handle shows (core spec 14.5 items 4 and 6, D8, 6.6).
+//
+// After a failed heartbeat it first keeps the handle and retries on it for
+// -keep: Windows can reattach an open handle to the server after a
+// reconnect (SMB durable handles), but only while the handle stays open.
+// Then it closes the handle and re-opens the file, and reports how long the
+// server refused that because it still held the old open.
 func runLockHold(args []string) error {
 	fs := flag.NewFlagSet("lock-hold", flag.ContinueOnError)
 	file := fs.String("file", "", "lock file on the share")
 	heartbeat := fs.Duration("heartbeat", 5*time.Second, "interval of the heartbeat write")
+	keep := fs.Duration("keep", 3*time.Minute, "how long to retry on the original handle before re-opening")
 	if err := parse(fs, args, "file"); err != nil {
 		return err
 	}
@@ -49,32 +56,56 @@ func runLockHold(args []string) error {
 	signal.Notify(stop, os.Interrupt)
 	tick := time.NewTicker(*heartbeat)
 	defer tick.Stop()
-	lost := time.Time{}
+	var lost, refused time.Time // when the heartbeat failed; when a re-open was first refused
+	closed := false             // the original handle was given up
+	var lastErr string
 	for {
 		select {
 		case <-stop:
-			windows.CloseHandle(h) //nolint:errcheck // released at exit anyway
+			if !closed {
+				windows.CloseHandle(h) //nolint:errcheck // released at exit anyway
+			}
 			info("released")
 			return nil
 		case now := <-tick.C:
-			line := fmt.Sprintf("held by %s, PID %d, heartbeat %s\r\n", host, os.Getpid(), now.Format(time.RFC3339))
-			err := writeAt(h, []byte(line))
-			switch {
-			case err != nil && lost.IsZero():
-				lost = now
-				info("%s heartbeat failed: %v; trying to re-open (core spec 6.6)", now.Format(time.TimeOnly), err)
-			case err != nil:
-				windows.CloseHandle(h) //nolint:errcheck // the handle is broken already
-				if nh, oerr := openLock(*file); oerr == nil {
-					h = nh
-					info("%s re-opened after %s", now.Format(time.TimeOnly), now.Sub(lost).Round(time.Second))
-					lost = time.Time{}
-				} else if errors.Is(oerr, windows.ERROR_SHARING_VIOLATION) {
-					info("%s re-open refused: someone else holds the lock now (core spec 6.6: read-only)", now.Format(time.TimeOnly))
+			at := now.Format(time.TimeOnly)
+			if !closed {
+				line := fmt.Sprintf("held by %s, PID %d, heartbeat %s\r\n", host, os.Getpid(), now.Format(time.RFC3339))
+				err := writeAt(h, []byte(line))
+				switch {
+				case err == nil && !lost.IsZero():
+					check(true, "%s heartbeat works again on the ORIGINAL handle after %s (durable handle reconnected)", at, now.Sub(lost).Round(time.Second))
+					lost, lastErr = time.Time{}, ""
+				case err != nil && lost.IsZero():
+					lost, lastErr = now, err.Error()
+					info("%s heartbeat failed: %v; retrying on the original handle for %s", at, err, *keep)
+				case err != nil && now.Sub(lost) >= *keep:
+					windows.CloseHandle(h) //nolint:errcheck // the handle is broken
+					closed = true
+					info("%s original handle given up after %s; re-opening (core spec 6.6)", at, now.Sub(lost).Round(time.Second))
+				case err != nil && err.Error() != lastErr:
+					lastErr = err.Error()
+					info("%s still failing on the original handle: %v", at, err)
 				}
-			case !lost.IsZero():
-				info("%s heartbeat works again after %s, without re-opening", now.Format(time.TimeOnly), now.Sub(lost).Round(time.Second))
-				lost = time.Time{}
+				continue
+			}
+			nh, oerr := openLock(*file)
+			switch {
+			case oerr == nil:
+				h, closed = nh, false
+				detail := ""
+				if !refused.IsZero() {
+					detail = fmt.Sprintf("; the server held the old open for %s after the first refusal", now.Sub(refused).Round(time.Second))
+				}
+				check(true, "%s re-opened %s after the heartbeat failed%s", at, now.Sub(lost).Round(time.Second), detail)
+				lost, refused, lastErr = time.Time{}, time.Time{}, ""
+			case errors.Is(oerr, windows.ERROR_SHARING_VIOLATION) && refused.IsZero():
+				refused = now
+				holder, _ := readShared(*file)
+				info("%s re-open refused (sharing violation); the file says %q. Keep it running until it re-opens.", at, holder)
+			case !errors.Is(oerr, windows.ERROR_SHARING_VIOLATION) && oerr.Error() != lastErr:
+				lastErr = oerr.Error()
+				info("%s re-open failed: %v", at, oerr)
 			}
 		}
 	}
