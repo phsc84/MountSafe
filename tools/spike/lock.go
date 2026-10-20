@@ -122,29 +122,42 @@ func runLockTry(args []string) error {
 		return err
 	}
 	start := time.Now()
+	var refused time.Time // the first sharing violation
+	lastErr := ""
 	for {
+		now := time.Now()
+		at := now.Format(time.TimeOnly)
 		h, err := openLock(*file)
-		if err == nil {
+		switch {
+		case err == nil:
 			windows.CloseHandle(h) //nolint:errcheck // only probing
-			if *wait && time.Since(start) > time.Second {
-				check(true, "the lock became free after %s", time.Since(start).Round(time.Second))
-			} else {
+			switch {
+			case refused.IsZero() && !*wait:
 				info("the lock is free: nobody holds it")
+			case refused.IsZero():
+				info("%s the lock is free: nobody holds it (the share answered after %s)", at, now.Sub(start).Round(time.Second))
+			default:
+				check(true, "%s the lock became free %s after the first refusal", at, now.Sub(refused).Round(time.Second))
 			}
 			return nil
-		}
-		if !errors.Is(err, windows.ERROR_SHARING_VIOLATION) {
+		case errors.Is(err, windows.ERROR_SHARING_VIOLATION):
+			if refused.IsZero() {
+				refused = now
+				check(true, "%s a second open for writing is refused with a sharing violation", at)
+				holder, rerr := readShared(*file)
+				check(rerr == nil, "the holder can still be read: %q %v", holder, rerr)
+				if !*wait {
+					return nil
+				}
+				info("waiting until the lock is free (kill the holder, or cut its network)...")
+			}
+		case !*wait:
 			check(false, "open for writing failed, but not with a sharing violation: %v", err)
 			return nil
-		}
-		if !*wait || time.Since(start) < time.Second {
-			check(true, "a second open for writing is refused with a sharing violation")
-			holder, rerr := os.ReadFile(*file)
-			check(rerr == nil, "the holder can still be read: %q %v", holder, rerr)
-			if !*wait {
-				return nil
-			}
-			info("waiting until the lock is free (kill the holder, or cut its network)...")
+		case err.Error() != lastErr:
+			// -wait also waits through a network that is still down.
+			lastErr = err.Error()
+			info("%s not reachable yet: %v", at, err)
 		}
 		time.Sleep(time.Second)
 	}
