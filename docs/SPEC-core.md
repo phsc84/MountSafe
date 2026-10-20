@@ -619,7 +619,7 @@ The programs for these checks are in `tools/spike`; its README says how to run e
 
 | Item | Result | Consequence for this spec |
 | ---- | ------ | ------------------------- |
-| 1. Network drive, Explorer, Office | | |
+| 1. Network drive, Explorer, Office | 2026-10-20, go-winfsp v1.0.6: network location; copy, Office save, rename (also case-only), delete of an open file as on a local disk; `volinfo`: file system `MountSafe`, case-preserving, not case-sensitive, `DRIVE_REMOTE`. Not indexed: open. | None so far. |
 | 2. Timestamps on the share | | |
 | 3. Renames: refused onto existing, atomic for a second client | | |
 | 4. Lock: refused, released on end / kill / network loss (seconds), re-opened after a drop | | |
