@@ -1,0 +1,27 @@
+# Normalise line endings: the index holds LF for every text file.
+* text=auto
+
+# Go sources, modules and data stay LF in the working tree too, so gofmt
+# accepts them on Windows with core.autocrlf=true.
+*.go   text eol=lf
+go.mod text eol=lf
+go.sum text eol=lf
+
+# Batch files need CRLF line endings to run reliably in cmd.exe.
+*.bat  text eol=crlf
+# PowerShell scripts keep the Windows convention.
+*.ps1  text eol=crlf
+# Git hooks run in the sh of Git for Windows.
+.githooks/* text eol=lf
+
+*.md   text
+*.yaml text
+*.json text
+*.svg  text
+
+*.png  binary
+*.ico  binary
+*.syso binary
+
+# Saved fuzz inputs are read by go test; keep them as Go wrote them.
+**/testdata/fuzz/** text eol=lf

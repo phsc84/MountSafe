@@ -1,0 +1,14 @@
+# Local settings
+.gitconfig
+
+# Build output and generated resources
+/dist/
+resource.syso
+*.exe
+*.zip
+
+# Logs of local runs
+*.log
+
+# Personal manual test folder
+/sandbox/
