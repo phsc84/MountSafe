@@ -608,7 +608,7 @@ With the go-winfsp `memfs` or passthrough example and small test programs agains
 1. Mount as a network drive with `VolumePrefix`; Explorer, Office save, copy and rename behave normally.
 2. `SetFileTime` on a file and a folder on the share sets creation, last-write and last-access time, and they survive a later write and rename (5.6).
 3. A rename on the share replaces nothing and is atomic as seen by a second client.
-4. `vault.lock` opened with share mode `FILE_SHARE_READ` blocks a write-open from a second Windows PC, and is released when the holding process is killed and when the PC loses the network (D8).
+4. `vault.lock` opened with share mode `FILE_SHARE_READ` blocks a write-open from a second SMB client (a second PC, or Windows Sandbox on the same PC), and is released when the holding process is killed and when the holder loses the network (D8). After a network drop of the holder, it can open the lock again when nobody else took it (6.6).
 5. Throughput of random 64 KiB reads and writes vs. 32 KiB and 256 KiB (D4).
 6. Behaviour when the Mac sleeps and wakes during an open handle (6.6).
 7. `FlushFileBuffers` on a file on the share returns only after the data is on the Mac's disk, so the order intent → data → commit (6.4) holds after a power loss of the Mac.
@@ -622,7 +622,7 @@ The programs for these checks are in `tools/spike`; its README says how to run e
 | 1. Network drive, Explorer, Office | | |
 | 2. Timestamps on the share | | |
 | 3. Renames: refused onto existing, atomic for a second client | | |
-| 4. Lock: refused, released on end / kill / network loss (seconds) | | |
+| 4. Lock: refused, released on end / kill / network loss (seconds), re-opened after a drop | | |
 | 5. Throughput 32 / 64 / 256 KiB | | |
 | 6. Mac sleep with an open handle | | |
 | 7. Flush survives a power loss of the Mac | | |

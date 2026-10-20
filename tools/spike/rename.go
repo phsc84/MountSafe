@@ -78,7 +78,7 @@ func runRename(args []string) error {
 var flipContent = bytes.Repeat([]byte("0123456789abcdef"), 64*1024) // 1 MiB
 
 // runRenameFlip renames a file between two names as fast as it can, for
-// rename-watch on a second PC (core spec 14.5 item 3).
+// rename-watch on a second SMB client (core spec 14.5 item 3).
 func runRenameFlip(args []string) error {
 	fs := flag.NewFlagSet("rename-flip", flag.ContinueOnError)
 	dir := fs.String("dir", "", "folder on the share, the same for rename-watch")

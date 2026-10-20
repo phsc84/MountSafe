@@ -6,18 +6,48 @@ The program is a development tool (SPEC-ci 3.2): it imports nothing of MountSafe
 
 ## Setup
 
-- **PC 1:** this repository, Go, and [WinFsp](https://winfsp.dev) (for item 1 only).
-- **PC 2:** a second Windows PC on the same network, for items 3 and 4. Copy `spike.exe` there; it needs no Go.
-- **The share:** a folder on the Mac mini's share, mapped or as a UNC path, e.g. `\\macmini\vaults\spike`, reachable from both PCs with the same account as MountSafe will use. Nothing else should be in it.
+- **The PC:** this repository, Go, and [WinFsp](https://winfsp.dev) (for item 1 only).
+- **A second SMB client** for items 3 and 4: **Windows Sandbox** on the same PC. It is a separate Windows with its own network adapter, so the Mac sees it as a second client, like a second PC. A second PC works as well, if one is at hand.
+- **The share:** a folder on the Mac mini's share, mapped or as a UNC path, e.g. `\\macmini\vaults\spike`, with the account MountSafe will use. Nothing else should be in it.
 - **The Mac:** as for MountSafe (core spec 4.1): sleep off. Item 6 turns sleep on once, on purpose.
 
-Build once, on PC 1:
+Build once:
 
 ```powershell
 go build -o sandbox\spike.exe ./tools/spike
 $S = "sandbox\spike.exe"
 $D = "\\macmini\vaults\spike"      # your share folder
 ```
+
+### Windows Sandbox as the second client
+
+Turn it on once (PowerShell as administrator, then restart Windows):
+
+```powershell
+Enable-WindowsOptionalFeature -Online -FeatureName Containers-DisposableClientVM -All
+```
+
+Start it with `spike.exe` in reach (from the repository folder, after the build above):
+
+```powershell
+@"
+<Configuration>
+  <MappedFolders>
+    <MappedFolder><HostFolder>$((Resolve-Path sandbox).Path)</HostFolder><SandboxFolder>C:\spike</SandboxFolder><ReadOnly>true</ReadOnly></MappedFolder>
+  </MappedFolders>
+</Configuration>
+"@ | Set-Content sandbox\spike.wsb
+Start-Process sandbox\spike.wsb
+```
+
+In the Sandbox, open PowerShell and connect to the share with the Mac account (the Sandbox has its own credentials):
+
+```powershell
+net use \\macmini\vaults /user:<mac user>
+C:\spike\spike.exe lock-try -file \\macmini\vaults\spike\vault.lock
+```
+
+Everything is gone when the Sandbox window is closed. Below, "Sandbox" means this PowerShell window, "PC" the normal one.
 
 Every command prints `PASS`, `FAIL` or `INFO` lines; copy them into the report. The exit code is 1 when a check failed.
 
@@ -47,7 +77,7 @@ Sets creation, last-write and last-access time of a file and a folder to the fix
 
 ## 3. Renames (core spec 6.3, 6.4)
 
-On PC 1:
+On the PC:
 
 ```powershell
 & $S rename -dir $D
@@ -55,43 +85,45 @@ On PC 1:
 
 Checks that a rename onto an existing name is refused (MountSafe never replaces by renaming), that a renamed file keeps its content, a case-only rename, and the rename of a non-empty folder.
 
-Then, atomicity as seen by a second client. On PC 1:
+Then, atomicity as seen by a second client. On the PC:
 
 ```powershell
 & $S rename-flip -dir $D -count 3000
 ```
 
-and, within 5 seconds, on PC 2:
+and, within 5 seconds, in the Sandbox:
 
 ```powershell
-spike.exe rename-watch -dir \\macmini\vaults\spike -duration 60s
+C:\spike\spike.exe rename-watch -dir \\macmini\vaults\spike -duration 60s
 ```
 
 `rename-flip` renames a 1 MiB file between two names; `rename-watch` reads it under either name again and again. **"never read a partial or wrong content" must be `PASS`**: a rename that the client or server did as a copy would show half-written content. "neither name found" and "both found" counts are expected (the watcher's two reads are not one snapshot); note them. Note the time per rename.
 
 ## 4. The lock (core spec D8, 6.2)
 
-On PC 1:
+On the PC:
 
 ```powershell
 & $S lock-hold -file "$D\vault.lock"
 ```
 
-On PC 2, while it runs:
+In the Sandbox, while it runs:
 
 ```powershell
-spike.exe lock-try -file \\macmini\vaults\spike\vault.lock
+C:\spike\spike.exe lock-try -file \\macmini\vaults\spike\vault.lock
 ```
 
-must show `PASS` for "a second open for writing is refused" and "the holder can still be read". Then three releases, each measured on PC 2 with `-wait`, starting `lock-hold` on PC 1 again before each:
+must show `PASS` for "a second open for writing is refused" and "the holder can still be read". Then three releases, each measured on the other side with `lock-try -wait`, starting `lock-hold` again before each:
 
-| Release | On PC 1 | Expected on PC 2 (`lock-try -wait`) |
-|---|---|---|
-| a. Normal end | Ctrl+C in `lock-hold` | free within seconds |
-| b. Killed | `taskkill /F /PID <pid>` (the PID `lock-hold` prints) | free within seconds |
-| c. Network lost | pull the network cable or turn Wi-Fi off; wait for the result; then reconnect | free after the SMB server notices; **note how long** |
+| Release | Holder (`lock-hold`) | Waiter (`lock-try -wait`) | Expected |
+|---|---|---|---|
+| a. Normal end | PC: Ctrl+C | Sandbox | free within seconds |
+| b. Killed | PC: `taskkill /F /PID <pid>` (the PID `lock-hold` prints) | Sandbox | free within seconds |
+| c. Network lost | **Sandbox**: `C:\spike\spike.exe lock-hold -file \\macmini\vaults\spike\vault.lock`, then cut its network: `Get-NetAdapter \| Disable-NetAdapter -Confirm:$false` | PC | free after the SMB server notices; **note how long** |
 
-For c, also note what `lock-hold` on PC 1 prints when the network comes back: whether its heartbeat fails, re-opens, or finds the lock taken by PC 2 (core spec 6.6 expects MountSafe to switch the vault to read-only then).
+In c the holder is in the Sandbox, because cutting the PC's network would cut the Sandbox's too. After the result, the Sandbox's network comes back with `Get-NetAdapter | Enable-NetAdapter`; note what its `lock-hold` prints then: whether the heartbeat works again, re-opens, or finds the lock taken by the PC (core spec 6.6 expects MountSafe to switch the vault to read-only then).
+
+**d. The same PC after a network drop** (the case with one PC): on the PC, `& $S lock-hold -file "$D\vault.lock" -heartbeat 2s`; pull the network cable or turn Wi-Fi off for about a minute, then reconnect. Note what `lock-hold` prints. The question is whether MountSafe can take its own lock back after a drop, or whether the Mac still holds the old open and refuses the re-open with a sharing violation, possibly for a while. Core spec 6.6 assumes the re-open works when nobody else took the lock.
 
 ## 5. Throughput (core spec D4)
 
@@ -103,7 +135,7 @@ Writes and reads a 4 GiB file sequentially, then random reads and writes with 32
 
 ## 6. The Mac sleeps with an open handle (core spec 6.6, 4.1)
 
-On PC 1:
+On the PC:
 
 ```powershell
 & $S lock-hold -file "$D\vault.lock" -heartbeat 2s
@@ -115,7 +147,7 @@ Put the Mac to sleep (Apple menu > Sleep), wait a minute, wake it. Note what `lo
 
 The commit order intent → data → commit holds after a power loss of the Mac only if `FlushFileBuffers` returns after the data is on its disk. macOS's `fsync` does not force the disk's own cache; whether the SMB server flushes further is what this checks.
 
-On PC 1:
+On the PC:
 
 ```powershell
 & $S flush-write -file "$D\flush.bin"
@@ -131,4 +163,4 @@ It appends a 4 KiB record every 100 ms, flushes it, and shows the number of the 
 
 ## Cleaning up
 
-Delete the folder on the share. Uninstall WinFsp from PC 1 only if you don't continue with MountSafe.
+Delete the folder on the share. Uninstall WinFsp only if you don't continue with MountSafe.

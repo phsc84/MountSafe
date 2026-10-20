@@ -5,8 +5,8 @@
 //	go run ./tools/spike mount -src \\nas\share\spike -drive P:
 //	go run ./tools/spike times -dir \\nas\share\spike
 //	go run ./tools/spike rename -dir \\nas\share\spike
-//	go run ./tools/spike rename-flip -dir \\nas\share\spike      (PC 1)
-//	go run ./tools/spike rename-watch -dir \\nas\share\spike     (PC 2)
+//	go run ./tools/spike rename-flip -dir \\nas\share\spike      (this PC)
+//	go run ./tools/spike rename-watch -dir \\nas\share\spike     (second client)
 //	go run ./tools/spike lock-hold -file \\nas\share\spike\vault.lock
 //	go run ./tools/spike lock-try -file \\nas\share\spike\vault.lock [-wait]
 //	go run ./tools/spike throughput -dir \\nas\share\spike
