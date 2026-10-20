@@ -614,3 +614,15 @@ With the go-winfsp `memfs` or passthrough example and small test programs agains
 7. `FlushFileBuffers` on a file on the share returns only after the data is on the Mac's disk, so the order intent → data → commit (6.4) holds after a power loss of the Mac.
 
 Any assumption that does not hold is changed in this specification before implementation starts.
+
+The programs for these checks are in `tools/spike`; its README says how to run each. Results (filled in after the spike):
+
+| Item | Result | Consequence for this spec |
+| ---- | ------ | ------------------------- |
+| 1. Network drive, Explorer, Office | | |
+| 2. Timestamps on the share | | |
+| 3. Renames: refused onto existing, atomic for a second client | | |
+| 4. Lock: refused, released on end / kill / network loss (seconds) | | |
+| 5. Throughput 32 / 64 / 256 KiB | | |
+| 6. Mac sleep with an open handle | | |
+| 7. Flush survives a power loss of the Mac | | |
