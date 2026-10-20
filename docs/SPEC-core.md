@@ -105,7 +105,8 @@ The current state of the vault is the truth. MountSafe keeps no versions and no 
 The reference NAS is a Mac mini (Apple silicon) sharing an APFS volume over macOS's built-in SMB server. Relevant properties:
 
 - APFS stores names as UTF-8 up to 255 bytes and is case-insensitive by default; encrypted names are ASCII Base32 (D9), so case sensitivity and Unicode normalization of the volume do not matter.
-- APFS keeps a creation time (birth time) and a change time per file; whether the macOS SMB server lets a client set the creation time is verified in the spike (14.5).
+- APFS keeps a creation time (birth time) and a change time per file. The macOS SMB server lets a client set creation, last-write and last-access time of files and folders; the change time stays the server's (spike, 14.5 item 2).
+- The macOS SMB server refuses writes through a handle opened for appending only (`FILE_APPEND_DATA` without `FILE_WRITE_DATA`, which is what Go's `os.O_APPEND` opens) with "Access is denied" (spike, 14.5 item 2; RestoreSafe 2.1.1 fixed its log for the same reason). MountSafe opens vault files with normal write access and writes at offsets; it never uses append-only handles.
 - The Mac must not sleep while a vault is mounted (Energy settings: prevent automatic sleeping); a sleeping host drops the SMB session (6.6).
 - Spotlight on the Mac may index the vault folder. It sees only ciphertext; excluding the folder (Spotlight privacy list) saves resources.
 
@@ -620,7 +621,7 @@ The programs for these checks are in `tools/spike`; its README says how to run e
 | Item | Result | Consequence for this spec |
 | ---- | ------ | ------------------------- |
 | 1. Network drive, Explorer, Office | 2026-10-20, go-winfsp v1.0.6: network location; copy, Office save, rename (also case-only), delete of an open file as on a local disk; `volinfo`: file system `MountSafe`, case-preserving, not case-sensitive, `DRIVE_REMOTE`; not in the Windows Search index. | None: D12 and D13 hold. |
-| 2. Timestamps on the share | | |
+| 2. Timestamps on the share | 2026-10-20: creation, last-write and last-access time of a file and a folder set to the vault time; unchanged after a rename, and after a write followed by setting them again, also 5 s later. The change time is the server's real time of the last change, including the last SetFileTime. Writes through an append-only handle are refused ("Access is denied"). | 5.6 holds. 4.1: vault files are never opened append-only. |
 | 3. Renames: refused onto existing, atomic for a second client | | |
 | 4. Lock: refused, released on end / kill / network loss (seconds), re-opened after a drop | | |
 | 5. Throughput 32 / 64 / 256 KiB | | |
