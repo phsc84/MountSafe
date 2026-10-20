@@ -59,11 +59,13 @@ func runTimes(args []string) error {
 
 	// A write changes last-write; MountSafe sets the vault time again after
 	// every change, and it must stick, also some seconds later.
-	f, err := os.OpenFile(file2, os.O_WRONLY|os.O_APPEND, 0)
+	// A normal write handle at the end of the file, as MountSafe writes;
+	// O_APPEND would open with FILE_APPEND_DATA only (appendOnlyProbe).
+	f, err := os.OpenFile(file2, os.O_WRONLY, 0)
 	if err != nil {
 		return err
 	}
-	if _, err := f.WriteString(" more"); err != nil {
+	if _, err := f.WriteAt([]byte(" more"), int64(len("content"))); err != nil {
 		f.Close()
 		return err
 	}
@@ -86,7 +88,41 @@ func runTimes(args []string) error {
 	expectVaultTime(file2, "5 s later")
 	expectVaultTime(folder2, "5 s later")
 	showTimes(file2, "final (ChangeTime is the server's; core spec 5.6 expects it to be the real time)")
+	appendOnlyProbe(work)
 	return nil
+}
+
+// appendOnlyProbe shows whether the share accepts a write through a handle
+// opened for appending only (Go's O_APPEND: FILE_APPEND_DATA without
+// FILE_WRITE_DATA), on a fresh file and on one whose times were set. The
+// macOS SMB server refused it once; MountSafe never opens such handles.
+func appendOnlyProbe(work string) {
+	fresh := filepath.Join(work, "append-fresh.f")
+	timed := filepath.Join(work, "append-timed.f")
+	for _, p := range []string{fresh, timed} {
+		if err := os.WriteFile(p, []byte("content"), 0o600); err != nil {
+			info("append-only probe: %v", err)
+			return
+		}
+	}
+	if err := setTimes(timed, vaultTime); err != nil {
+		info("append-only probe: %v", err)
+		return
+	}
+	for _, p := range []string{fresh, timed} {
+		f, err := os.OpenFile(p, os.O_WRONLY|os.O_APPEND, 0)
+		if err == nil {
+			_, err = f.WriteString(" more")
+			if cerr := f.Close(); err == nil {
+				err = cerr
+			}
+		}
+		result := "works"
+		if err != nil {
+			result = err.Error()
+		}
+		info("append-only handle on %s: %s", filepath.Base(p), result)
+	}
 }
 
 // expectVaultTime checks that creation, last-write and last-access time of
