@@ -3,6 +3,7 @@
 // README says how to run each and what to record.
 //
 //	go run ./tools/spike mount -src \\nas\share\spike -drive P:
+//	go run ./tools/spike volinfo -drive P:
 //	go run ./tools/spike times -dir \\nas\share\spike
 //	go run ./tools/spike rename -dir \\nas\share\spike
 //	go run ./tools/spike rename-flip -dir \\nas\share\spike      (this PC)
@@ -33,6 +34,7 @@ type command struct {
 
 var commands = map[string]command{
 	"mount":        {"1", "-src <dir> -drive <X:> [-prefix \\mountsafe\\spike]", runMount},
+	"volinfo":      {"1", "-drive <X:>", runVolInfo},
 	"times":        {"2", "-dir <dir>", runTimes},
 	"rename":       {"3", "-dir <dir>", runRename},
 	"rename-flip":  {"3", "-dir <dir> [-count n]", runRenameFlip},

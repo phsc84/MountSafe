@@ -64,8 +64,14 @@ The drive serves `$D\mount` unencrypted, through go-winfsp, as MountSafe will se
 - Word and Excel: create, save, save again, close, reopen a document on `P:` (Office saves through a temporary file and renames).
 - Rename and move files and folders in Explorer, also a case-only rename (`a.txt` → `A.txt`).
 - Delete a file that is open in another program: Windows refuses or defers as on a local disk.
-- Windows Search: `P:` is not indexed (Indexing Options don't list it).
-- `fsutil fsinfo volumeinfo P:` shows file system name `MountSafe`, case-preserving and not case-sensitive.
+- Windows Search: `P:` is not indexed. Finding a file in Explorer proves nothing (Explorer then searches file by file); the sign is the yellow bar *"Searches might be slow in non-indexed locations"* when searching on `P:`. Or ask the index (normal PowerShell, while mounted):
+  ```powershell
+  $c = New-Object -ComObject ADODB.Connection
+  $c.Open("Provider=Search.CollatorDSO;Extended Properties='Application=Windows';")
+  $r = $c.Execute("SELECT TOP 5 System.ItemPathDisplay FROM SystemIndex WHERE SCOPE='file:P:/'")
+  if ($r.EOF) { "P: is not indexed" } else { while (-not $r.EOF) { $r.Fields.Item(0).Value; $r.MoveNext() } }
+  ```
+- In a second PowerShell, while mounted: `& $S volinfo -drive P:` checks file system name `MountSafe`, case-preserving names, no case-sensitive search, and that Windows sees a network drive. (`fsutil fsinfo volumeinfo` shows the same, but needs an administrator prompt.)
 
 ## 2. Timestamps on the share (core spec 5.6, D10)
 
