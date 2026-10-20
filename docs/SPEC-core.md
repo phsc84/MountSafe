@@ -622,7 +622,7 @@ The programs for these checks are in `tools/spike`; its README says how to run e
 | ---- | ------ | ------------------------- |
 | 1. Network drive, Explorer, Office | 2026-10-20, go-winfsp v1.0.6: network location; copy, Office save, rename (also case-only), delete of an open file as on a local disk; `volinfo`: file system `MountSafe`, case-preserving, not case-sensitive, `DRIVE_REMOTE`; not in the Windows Search index. | None: D12 and D13 hold. |
 | 2. Timestamps on the share | 2026-10-20: creation, last-write and last-access time of a file and a folder set to the vault time; unchanged after a rename, and after a write followed by setting them again, also 5 s later. The change time is the server's real time of the last change, including the last SetFileTime. Writes through an append-only handle are refused ("Access is denied"). | 5.6 holds. 4.1: vault files are never opened append-only. |
-| 3. Renames: refused onto existing, atomic for a second client | | |
+| 3. Renames: refused onto existing, atomic for a second client | 2026-10-20, one client: a rename onto an existing name is refused and leaves it unchanged; a renamed file keeps its content and its old name is gone; case-only rename; rename of a non-empty folder. Second client (Sandbox): open. | None so far. |
 | 4. Lock: refused, released on end / kill / network loss (seconds), re-opened after a drop | | |
 | 5. Throughput 32 / 64 / 256 KiB | | |
 | 6. Mac sleep with an open handle | | |
