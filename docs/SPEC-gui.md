@@ -2,7 +2,7 @@
 
 |          |                                                                 |
 | -------- | --------------------------------------------------------------- |
-| Status   | Draft 0.3 (2026-10-20). Not implemented.                         |
+| Status   | Draft 0.4 (2026-10-20). Not implemented.                         |
 | Core     | [SPEC-core.md](SPEC-core.md), [SPEC-kdf.md](SPEC-kdf.md) |
 | Language | English only.                                                    |
 
@@ -47,6 +47,8 @@ One row per vault from `config.yaml` (SPEC-core 7.1): name, path, status. Double
 | Not mounted | Reachable, header copies valid, lock free. | enabled | disabled |
 | Mounted on P: | Mounted by this MountSafe. | disabled | enabled |
 | In use on PC-OFFICE | Lock held by another mount (tooltip: user and since when, SPEC-core 6.2). | disabled | disabled |
+| Locked by an earlier session | The lock is an orphan of a session on this PC that ended while the NAS was unreachable (SPEC-core 6.2 step 1). Tooltip: *"The NAS releases it a few minutes after the connection is back."* | enabled; waits (5.2) | disabled |
+| Mounted on P: – connection lost since 21:35 | The NAS is unreachable during the mount; MountSafe waits for it (SPEC-core 6.6). | disabled | enabled; drops what is not committed and says so (5.3) |
 | Not reachable | Path not available (NAS off, drive not connected) and not found on another drive letter (SPEC-core 7.5). Tooltip names the remedy. | disabled | disabled |
 | Found on E: and G: | Not at its path, but on several other drive letters (SPEC-core 7.5). | enabled; asks which (5.2) | disabled |
 | Damaged | No valid header copy, or the copies differ (SPEC-core 5.1). Tooltip names the remedy. | disabled | disabled |
@@ -92,6 +94,7 @@ Used by Mount (5.2). Shows the vault name and what is needed:
 ## 4. Progress and errors
 
 - Long steps (unlocking, mounting, unmounting with a cache flush) show a progress text in the vault's status cell; the window stays responsive.
+- A lost connection to the NAS during a mount is not a dialog: the status cell shows *"Mounted on P: – connection lost since 21:35"* until the NAS answers again (SPEC-core 6.6). If the lock was lost for good, a message box names the unsaved changes that were lost, and the status becomes *Read-only (lock lost)*.
 - Errors appear in a message box that names the vault and ends with the `Remedy:` of SPEC-core 9.
 - Problems found while mounted (SPEC-core 6.8: damaged, missing, hidden entries, folders that cannot be listed) are not shown as dialogs as they occur. The vault row shows *"Mounted on P: – 3 problems"* with a **Show problems** link. It opens a list with the plaintext path, what was found (*"Changed or damaged"*, *"Deleted outside MountSafe"*, *"Added outside MountSafe – hidden"*, *"Older copy – hidden"*, *"Folder can't be listed"*) and the remedy: restore from the vault's backup, or **Accept vault as found** (5.6) after unmounting when the changes are known to be harmless. The list lives in memory only; the log names entries by plaintext path only at `log_level: debug` (SPEC-core 7.3).
 
@@ -141,11 +144,12 @@ Validation:
 ### 5.2 Mount
 
 1. If the vault was found on several drive letters (SPEC-core 7.5): *"Private was found on E:\Vaults\Private and G:\Vaults\Private. One of them may be an older copy, for example a backup."* – one button per path / **Cancel**. The chosen path is saved in `config.yaml`.
-2. If the preferred drive letter is taken: a small dialog to choose a free letter (remembered in `config.yaml`).
-3. Unlock dialog (3).
-4. If the vault is older than when this PC last used it (SPEC-core 6.2 step 4), a warning dialog: *"This copy of Private is older than the one this PC used last (state 1,200; last used 1,234). Someone may have replaced the vault with an older copy, or it was restored from a backup or snapshot on purpose. Changes made after that copy are not in it."* – **Use this older state** / **Cancel** (default).
-5. If the last commit was interrupted (SPEC-core 6.4), the files being written then are checked while *"Checking files from an interrupted session…"* shows in the status cell. If any is damaged: *"Private was not closed properly when it was last used. 4 files being written at that time were checked; 1 is damaged."* – **Show problems** / **OK**. If none is damaged, nothing is shown.
-6. Mount (SPEC-core 6.2). On success the status changes to *Mounted on P:* and Explorer opens the drive.
+2. If the lock is an orphan of an earlier session on this PC (SPEC-core 6.2 step 1): *"Private is still locked by an earlier MountSafe session on this PC that ended while the NAS was unreachable. The NAS releases the lock a few minutes after the connection is back."* – **Wait** (default) / **Cancel**. While waiting, the status cell shows *"Waiting for the NAS to release the lock…"* and the mount continues by itself when it is free; **Cancel** stays available.
+3. If the preferred drive letter is taken: a small dialog to choose a free letter (remembered in `config.yaml`).
+4. Unlock dialog (3).
+5. If the vault is older than when this PC last used it (SPEC-core 6.2 step 4), a warning dialog: *"This copy of Private is older than the one this PC used last (state 1,200; last used 1,234). Someone may have replaced the vault with an older copy, or it was restored from a backup or snapshot on purpose. Changes made after that copy are not in it."* – **Use this older state** / **Cancel** (default).
+6. If the last commit was interrupted (SPEC-core 6.4), the files being written then are checked while *"Checking files from an interrupted session…"* shows in the status cell. If any is damaged: *"Private was not closed properly when it was last used. 4 files being written at that time were checked; 1 is damaged."* – **Show problems** / **OK**. If none is damaged, nothing is shown.
+7. Mount (SPEC-core 6.2). On success the status changes to *Mounted on P:* and Explorer opens the drive.
 
 ### 5.3 Unmount
 
@@ -177,9 +181,10 @@ Then the unlock dialog (3). Every file is read once (SPEC-core 7.6); the status 
 - Wrong password three times; wrong YubiKey; recovery code with typo and correct.
 - Mount with less free memory than the vault's Argon2id setting: the memory question appears; Try again, Continue and Cancel work.
 - WinFsp uninstalled: banner, Mount disabled.
-- NAS disconnected while mounted: errors and read-only status as specified.
+- NAS disconnected while mounted: a few seconds (nothing visible), about a minute (*connection lost* status, then normal again, nothing lost), and long enough for the lock to be lost (read-only, lost changes named).
+- MountSafe ended while the NAS was unreachable, then Mount again: *Locked by an earlier session*, **Wait** mounts when the NAS releases the lock.
 - Process killed during a copy: the next mount checks the interrupted files and reports only damaged ones.
-- Vault replaced with an older copy: the warning of 5.2 step 4; **Cancel** and **Use this older state** behave as specified, and the warning doesn't come back after accepting.
+- Vault replaced with an older copy: the warning of 5.2 step 5; **Cancel** and **Use this older state** behave as specified, and the warning doesn't come back after accepting.
 - File deleted and file added in the vault folder from outside: **Show problems** lists both with the right wording; **Accept vault as found** clears them.
 - External drive connected again with another drive letter: the new path appears in the list; a second copy on another drive: *Found on E: and G:* and the choice at Mount.
 - Add existing vault with a vault that's already in the list at another path.

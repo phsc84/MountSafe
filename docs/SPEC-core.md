@@ -2,7 +2,7 @@
 
 |                |                                                                                       |
 | -------------- | ------------------------------------------------------------------------------------- |
-| Status         | Draft 0.5 (2026-10-20). Not implemented.                                               |
+| Status         | Draft 0.6 (2026-10-20). Not implemented.                                               |
 | Platform       | Windows 11 64-bit only. User interface in English only.                                |
 | Prerequisite   | WinFsp installed by the user (not bundled).                                            |
 | Related        | RestoreSafe (phsc84/RestoreSafe). MountSafe is a separate tool; RestoreSafe needs no changes for it. Both follow SPEC-kdf.md, which also changes RestoreSafe (SPEC-kdf 5). |
@@ -322,7 +322,9 @@ The creation dialog states that the password, YubiKey and recovery code of a vau
 
 ### 6.2 Mount
 
-1. Open `vault.lock` (create if missing) with read/write access and share mode `FILE_SHARE_READ` and keep the handle open for the whole mount. On a sharing violation, open it read-only and show who holds it: *"This vault is mounted on PC-OFFICE by philip since 2026-10-20 08:12."* Nothing else happens.
+1. Open `vault.lock` (create if missing) with read/write access and share mode `FILE_SHARE_READ` and keep the handle open for the whole mount. On a sharing violation, open it read-only and read who holds it:
+   - **Another PC, or a MountSafe process on this PC that is running:** *"This vault is mounted on PC-OFFICE by philip since 2026-10-20 08:12."* Nothing else happens.
+   - **This PC, and no MountSafe process with that process ID is running:** the lock is an orphan of an earlier session on this PC that ended (crash, kill, power loss) while the NAS was unreachable. The NAS keeps such an open for a few minutes after the connection is back (about 3 minutes on the target NAS, 14.5 item 4) and then releases it. MountSafe says so and offers to wait: it tries again every 5 seconds and continues with step 2 as soon as the lock is free (6.6).
 2. Write host name, user, process ID and time into `vault.lock` (informational only; this time is visible on the NAS, see 10.2).
 3. Check the available memory against the slot's Argon2id parameters (SPEC-kdf 4.4, unlock); then read and unlock the vault header (5.1).
 4. Read the vault state (5.8). If its epoch is lower than the state counter this PC remembers for the vault (7.1), the vault is older than when this PC last used it: ask before going on (6.8). **Use this older state** writes the next slot with the remembered counter + 1, so the accepted state is not reported again on this PC; **Cancel** releases the lock.
@@ -394,8 +396,21 @@ A crash before the rename loses only the metadata change: the entry keeps its pr
 
 ### 6.6 Network interruptions
 
-- I/O errors from the NAS are returned to Windows as I/O errors; MountSafe retries a failed write of the cache once after the connection is back.
-- If the lock handle is lost (the SMB session was dropped), MountSafe tries to re-open it. If another mount took the lock in the meantime, or it cannot be re-opened, the volume switches to read-only and MountSafe tells the user which unsaved changes were lost (plaintext paths). An interrupted commit is recovered at the next mount (6.4).
+Behaviour of the target NAS, measured in the spike (14.5 item 4):
+
+| Drop | What happens |
+| ---- | ------------ |
+| A few seconds | The Windows SMB client hides it; no request fails. Writes may only reach Windows' cache in the meantime; they are on the NAS only after a flush returns. |
+| About a minute, handles kept open | Requests fail with network errors while the NAS is unreachable. When it is back, Windows reattaches the open handles (SMB durable handles); the lock stays held throughout, and no other client can take it. |
+| A handle closed, or the process ended, during the drop | The NAS keeps the open until its durable timeout, about 3 minutes after the connection is back, and refuses every other open of the file in that time, also from this PC. |
+
+Therefore:
+
+- **Never close a vault handle because of a network error.** MountSafe keeps the lock handle and every other open vault handle through a drop; closing one would leave an orphaned open on the NAS (third row) and make the lock unavailable even to this PC. Handles are closed only when the file is done with, or at unmount.
+- **Durability comes from flushes only.** A write that returned is not on the NAS until a flush has returned; every step of a commit ends with a flush (6.4), so a drop of any length never makes a commit look complete when it is not.
+- **During a drop,** reads that the cache cannot serve and commits fail with network errors; requests from Windows get I/O errors, data in the write-back cache stays in memory. The vault's row shows *"Connection lost since 21:35 – waiting"* (SPEC-gui 4). MountSafe retries the failed commit when the NAS answers again, as long as the user lets it wait; **Unmount** during a drop drops what is not committed and says which plaintext paths are affected.
+- **When the NAS answers again** and the lock handle works, the mount continues as if nothing happened. If the lock handle stays invalid (the drop outlasted the NAS's durable timeout), MountSafe re-opens the lock. If that is refused because another PC took it, or fails otherwise, the volume switches to read-only and MountSafe tells the user which unsaved changes were lost (plaintext paths). An interrupted commit is recovered at the next mount (6.4).
+- **A session that ends during a drop** (crash, kill, power loss) leaves an orphaned lock on the NAS for a few minutes; the next mount on this PC recognises it and waits (6.2 step 1).
 
 ### 6.7 Unmount
 
@@ -592,7 +607,8 @@ With the vault unlocked and not mounted: decrypt every name and every chunk of e
 ### 14.3 Failure tests
 
 - Process killed during writes: only the affected files are reported as damaged; all other files read correctly after the next mount.
-- NAS connection dropped and restored during writes; lock lost and taken by another PC.
+- NAS connection dropped and restored during writes: for a few seconds (nothing visible), for about a minute (handles reattach, the failed commit is retried, nothing lost), and longer than the NAS's durable timeout (read-only, lost changes named); lock lost and taken by another PC.
+- MountSafe killed during a drop: the next mount on this PC recognises the orphaned lock, waits, and mounts when the NAS releases it (6.2 step 1).
 - Damaged `vault.msv` with intact `vault.msv.bak` and vice versa.
 - Bit flips in names, headers, chunks, tag tables, manifests and state slots are reported, never returned.
 - Rollback attacks with real snapshots: take a copy of the vault, keep working, then put back from the copy one chunk, one file, one `folder.m`, one state slot, both state slots, and the whole vault; each is detected as in 6.8.
@@ -623,7 +639,7 @@ The programs for these checks are in `tools/spike`; its README says how to run e
 | 1. Network drive, Explorer, Office | 2026-10-20, go-winfsp v1.0.6: network location; copy, Office save, rename (also case-only), delete of an open file as on a local disk; `volinfo`: file system `MountSafe`, case-preserving, not case-sensitive, `DRIVE_REMOTE`; not in the Windows Search index. | None: D12 and D13 hold. |
 | 2. Timestamps on the share | 2026-10-20: creation, last-write and last-access time of a file and a folder set to the vault time; unchanged after a rename, and after a write followed by setting them again, also 5 s later. The change time is the server's real time of the last change, including the last SetFileTime. Writes through an append-only handle are refused ("Access is denied"). | 5.6 holds. 4.1: vault files are never opened append-only. |
 | 3. Renames: refused onto existing, atomic for a second client | 2026-10-20, one client: a rename onto an existing name is refused and leaves it unchanged; a renamed file keeps its content and its old name is gone; case-only rename; rename of a non-empty folder. Second client (Sandbox): open. | None so far. |
-| 4. Lock: refused, released on end / kill / network loss (seconds), re-opened after a drop | 2026-10-20, d (one PC, Wi-Fi off about 1.5 min): after reconnecting, the Mac refused this PC's own re-open of the lock with a sharing violation (it still held the old open), for at least 22 s, until stopped. Second run, Wi-Fi off about 1 min, the original handle kept open: the heartbeat worked again on it after 1 min 10 s (SMB durable handle reconnected); the refusal of the first run came from closing the handle too early. Open: a 10 s drop; how long the Mac keeps an open whose client never comes back. | **6.6 does not hold as written**: a short drop would make the vault read-only, and a lock left by this PC would look like another mount. Changed after the open measurements. |
+| 4. Lock: refused, released on end / kill / network loss (seconds), re-opened after a drop | 2026-10-20, d (one PC, Wi-Fi off about 1.5 min): after reconnecting, the Mac refused this PC's own re-open of the lock with a sharing violation (it still held the old open), for at least 22 s, until stopped. Second run, Wi-Fi off about 1 min, the original handle kept open: the heartbeat worked again on it after 1 min 10 s (SMB durable handle reconnected); the refusal of the first run came from closing the handle during the drop. Third run, about 10 s off: no error at all. Fourth run, the holder ended during the drop: the Mac refused the lock to this PC from the reconnect (21:36:20) for 3 min 1 s, then released it. a–c (second client): open. | **6.6 rewritten**: handles are kept through a drop, never closed because of a network error; durability only from flushes. **6.2 step 1**: a lock left by an ended session of this PC is recognised and waited for. |
 | 5. Throughput 32 / 64 / 256 KiB | | |
 | 6. Mac sleep with an open handle | | |
 | 7. Flush survives a power loss of the Mac | | |
