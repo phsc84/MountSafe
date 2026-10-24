@@ -19,4 +19,8 @@ write_back_seconds: 5
 # Open files on the drive are closed by force.
 unmount_on_sleep: false
 
+# Warn when the system drive is not BitLocker-protected (core spec 10.3). Set to false (or click
+# "Don't show again") when it is encrypted otherwise, for example with VeraCrypt.
+warn_unencrypted_system_drive: true
+
 log_level: "info"

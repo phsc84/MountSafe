@@ -72,7 +72,7 @@ The status is refreshed at start, after every action, with `F5`, and every 30 se
 At most two banners at the top of the window, above the vault list:
 
 - **WinFsp missing.** When WinFsp cannot be loaded, a banner says so and offers **Install WinFsp…**, which opens winfsp.dev in the browser. Mount is disabled; Create vault and Add existing vault stay available. The banner disappears with `F5` after installation.
-- **System drive not encrypted** (SPEC-core 10.3). When BitLocker does not protect the system drive: *"This PC's system drive is not encrypted. While a vault is mounted, its keys can reach the page file or the hibernation file, and with them someone who steals this PC could open the vault."* – **How to turn on BitLocker…** (opens Settings > Privacy & security > Device encryption, or BitLocker in the Control Panel where that page does not exist) / **Dismiss** (until the next start). It does not block anything.
+- **System drive not encrypted** (SPEC-core 10.3). When BitLocker does not protect the system drive: *"This PC's system drive is not encrypted. While a vault is mounted, its keys can reach the page file or the hibernation file, and with them someone who steals this PC could open the vault."* – **How to turn on BitLocker…** (opens Settings > Privacy & security > Device encryption, or BitLocker in the Control Panel where that page does not exist) / **Dismiss** (until the next start) / **Don't show again** (sets `warn_unencrypted_system_drive: false`, SPEC-core 11; for a system drive encrypted otherwise, for example with VeraCrypt). It does not block anything.
 
 ### 2.4 Closing the window
 
@@ -203,7 +203,7 @@ Then the unlock dialog (3). Every file is read once (SPEC-core 7.6); the status 
 - Shut down while a large copy onto P: is being committed: Windows' shutdown screen names MountSafe; waiting lets the commit finish and the vault mounts cleanly next time; **Shut down anyway** leaves an interrupted commit that the next mount recovers.
 - Sleep with a vault mounted: after waking, the vault works again (or shows *connection lost* until the NAS answers). With `unmount_on_sleep: true`: the vault is unmounted before sleeping.
 - NAS full during a copy: the *NAS is full* status, the copy fails with "disk full", deleting a file on P: or freeing space on the NAS lets the waiting changes through.
-- System drive without BitLocker: the banner of 2.3; **Dismiss** hides it until the next start.
+- System drive without BitLocker: the banner of 2.3; **Dismiss** hides it until the next start, **Don't show again** for good.
 - `MountSafe.exe` started twice: the first window comes to the front, no second window.
 - **Accept these changes** in the problem list after deleting and adding a file in the vault folder from outside: only those entries are checked, the problems disappear.
 - Keyboard only: every action reachable; Narrator reads the list and the dialogs.
