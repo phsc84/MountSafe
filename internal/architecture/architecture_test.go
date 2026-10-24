@@ -15,7 +15,8 @@ const winfsp = "github.com/winfsp/go-winfsp"
 // layers lists the package groups from bottom to top. A package may import
 // packages of its own layer and of lower layers, never of higher ones.
 var layers = [][]string{
-	{".", "internal/security"}, // ".": the module root
+	{".", "internal/fsx", "internal/problem", "internal/buildinfo"}, // ".": the module root
+	{"internal/security"},
 	{"internal/config", "internal/logging"},
 	{"internal/vault"},
 	{"internal/mount"},

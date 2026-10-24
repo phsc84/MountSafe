@@ -497,16 +497,19 @@ For a vault that is unlocked and not mounted (SPEC-gui 5.6): rebuild every folde
 - Go standard library, `golang.org/x/crypto/argon2`, `golang.org/x/sys/windows`, `github.com/winfsp/go-winfsp` (MIT; no cgo, loads the WinFsp DLL at runtime). The go-winfsp version is pinned and its use is confined to `internal/mount` (D12).
 - Runtime: WinFsp (GPLv3 with FLOSS exception; MountSafe is GPL-3.0 like RestoreSafe).
 
-| Folder | Content |
-| ------ | ------- |
-| `cmd/mountsafe` | Entry point of `MountSafe.exe`. |
-| `internal/gui` | The window (SPEC-gui). |
-| `internal/mount` | WinFsp adapter (go-winfsp native API): maps file system requests to `vault` operations, write-back cache. The only package that imports go-winfsp. |
-| `internal/vault` | Vault format: header, names, file entries and tag tables, folder manifests, vault state and commits, directory index, lock. No WinFsp dependency. |
-| `internal/security` | Copied from RestoreSafe: `cryptox`, recovery codes, YubiKey through Windows WebAuthn; slot AAD prefix and RP ID changed; Argon2id defaults, limits and memory check per SPEC-kdf.md. |
-| `internal/config`, `logging` | Configuration, log files. |
+| Folder | Content | Layer |
+| ------ | ------- | ----- |
+| `cmd/mountsafe` | Entry point of `MountSafe.exe`. | 7 |
+| `internal/gui` | The window (SPEC-gui); widgets and Win32 helpers copied from RestoreSafe. | 6 |
+| `internal/mount` | WinFsp adapter (go-winfsp native API): maps file system requests to `vault` operations, write-back cache, read-ahead, network interruptions (6.6). The only package that imports go-winfsp. | 5 |
+| `internal/vault` | Vault format and operations: header, **key set and slots** (adapted from RestoreSafe's `format/container/keyset.go`: slot AAD prefix `"MountSafe v1 slot"`, no RestoreSafe container), names, file entries and tag tables, folder manifests, vault state and commits, recovery, the checks of 6.8, directory index, lock, Accept as found. All access to vault files goes through a small file system interface, so that tests can inject crashes, network errors and lost writes (14.3). No WinFsp dependency. | 4 |
+| `internal/config`, `internal/logging` | Configuration (`config.yaml`, the vault list, 7.1, 11), log files (7.3). | 3 |
+| `internal/security` | Copied from RestoreSafe: `cryptox` (AES-GCM, HKDF, Argon2id with the defaults and limits of SPEC-kdf.md, zeroing), `recovery` (recovery codes), `yubikey` (Windows WebAuthn; RP ID `mountsafe`). | 2 |
+| `internal/fsx` | Windows helpers below everything: long paths (`\\?\`, `\\?\UNC\`, section 12), `SetFileTime`, `MoveFileEx` without replace, `GetDriveType` and the error mode for the drive search (7.5), the memory status for the check of SPEC-kdf 4.4 (`GlobalMemoryStatusEx`), process lookup for the orphaned-lock check (6.2). | 1 |
+| `internal/problem` | The error type with a remedy (section 9), copied from RestoreSafe. | 1 |
+| `internal/buildinfo` | The version, written into `app_version` (5.1) and the log. | 1 |
 
-Imports point downward only (`gui` → `mount` → `vault` → `security`); checked by an architecture test as in RestoreSafe.
+Imports point downward only, from a higher layer to a lower one or within a layer: `cmd` → `gui` → `mount` → `vault` → `config`/`logging` → `security` → `fsx`/`problem`/`buildinfo`. The architecture test (`internal/architecture`) enforces it, and that only `internal/mount` imports go-winfsp, as in RestoreSafe. The order of implementation is in [PLAN-implementation.md](PLAN-implementation.md).
 
 ## 9. Error handling principles
 
