@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Prepared 2026-10-24; not started |
+| Status | Prepared 2026-10-24, decisions O1–O4 taken; not started |
 | Implements | [SPEC-core.md](SPEC-core.md) Draft 0.7, [SPEC-gui.md](SPEC-gui.md) Draft 0.5, [SPEC-kdf.md](SPEC-kdf.md) Draft 0.3 |
 | Prepared by | The spike of core spec 14.5 (done 2026-10-24, results in its table) and the review of core spec 4–7 (2026-10-24) |
 | Branch | `dev`; a milestone that takes long may get `feature-<name>` (CONTRIBUTING.md section 1) |
@@ -74,7 +74,7 @@ The vault as a library: everything core spec 6 and 7 do, on a folder, called fro
 | M3.4 | Unmount, also at logoff and shutdown | core 6.7 | open files, forced unmount, logoff with a mounted vault |
 | M3.5 | File system tests of 14.2 (copy trees, random writes, large files, winfsp-tests, fsx) | core 14.2 | pass on a local vault and on the NAS |
 
-Decision in M3 (O2 below): whether CI gets a `mount` job that installs WinFsp on the runner.
+| M3.6 | A `mount` CI job (O2): installs WinFsp on the GitHub runner and runs the 14.2 tests against a vault in the runner's temporary folder; a required check of `main` once it runs reliably | SPEC-ci | green on several pushes in a row; SPEC-ci and GUIDE-ci describe it |
 
 ### M4 – The program
 
@@ -92,17 +92,19 @@ Decision in M3 (O2 below): whether CI gets a `mount` job that installs WinFsp on
 | M5.1 | Failure tests of 14.3 by hand on the Mac mini: process killed, Wi-Fi off, Sandbox as a second client, rollback attacks with real copies | core 14.3 | each case as specified |
 | M5.2 | Performance on the NAS | core 14.4 | the targets of 14.4 |
 | M5.3 | User README, CHANGELOG 1.0.0, release section of CONTRIBUTING.md | – | written |
-| M5.4 | An external review of the format and the crypto code (proposal P8 of the comparison with VeraCrypt) | – | decided whether and by whom |
+| M5.4 | A self-review of the format and the crypto code instead of a paid external one (O4): a written checklist (nonces and their limits, key separation, AAD of every encryption, comparisons in constant time, zeroing, every parser's bounds, every error path of 6.8), worked through against the code, with the result kept in this plan; the user README says that MountSafe has not been reviewed independently | core 5, 6.8, 10 | checklist done, findings fixed |
 | M5.5 | Release 1.0.0: from then on the vault format is frozen (CONTRIBUTING.md section 6) and the known-answer vectors never change | – | released |
 
-## 4. Open decisions
+## 4. Decisions
 
-| # | Question | Needed by | Proposal |
-|---|---|---|---|
-| O1 | K3: does `password_min_length` stay 12 (KDF spec 8)? | M2.2 (Create vault) | Decide with RestoreSafe 2.2; MountSafe uses the same value. |
-| O2 | A CI job that mounts: install WinFsp on the GitHub runner (`choco install winfsp`) and run the 14.2 tests there? | M3 | Try it in M3; if it is reliable, a required check. Otherwise the 14.2 tests run locally before each push that touches `internal/mount`. |
-| O3 | SPEC-kdf in code: RestoreSafe 2.2 and MountSafe both change `cryptox` the same way (KDF 5.3). Who first? | M1.3 | MountSafe in M1.3 (it has no older vaults, so no read limits below the enrollment limits); RestoreSafe 2.2 takes the same code back and adds its read limits. The two copies are compared at that point. |
-| O4 | M5.4, the external review: before 1.0.0, or after with 1.0.0 marked as unreviewed? | M5 | Decide at M4. |
+Decided by the owner, 2026-10-24:
+
+| # | Question | Decision |
+|---|---|---|
+| O1 | K3: does `password_min_length` stay 12 (KDF spec 8)? | **Yes, 12**, in MountSafe and RestoreSafe (KDF spec K3). |
+| O2 | A CI job that mounts: install WinFsp on the GitHub runner and run the 14.2 tests there? | **Yes, if possible** (M3.6). If it cannot run reliably on the runner, the 14.2 tests run locally before each push that touches `internal/mount`, and SPEC-ci says so. |
+| O3 | SPEC-kdf in code: RestoreSafe 2.2 and MountSafe both change `cryptox` the same way (KDF 5.3). Who first? | **MountSafe in M1.3** (it has no older vaults, so no read limits below the enrollment limits); RestoreSafe 2.2 takes the same code back and adds its read limits. The two copies are compared at that point. |
+| O4 | An external review of the format and the crypto code (proposal P8 of the comparison with VeraCrypt)? | **No paid review.** A written self-review instead (M5.4), and the user README says that MountSafe has not been reviewed independently. |
 
 ## 5. Risks
 
