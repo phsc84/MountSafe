@@ -2,7 +2,7 @@
 
 |          |                                                                                                   |
 | -------- | ------------------------------------------------------------------------------------------------- |
-| Status   | Draft 0.3 (2026-10-24): defaults decided and measured (sections 4.1, 6); K1, K3 and K4 closed. Not implemented. |
+| Status   | Draft 0.4 (2026-10-24): defaults decided and measured (sections 4.1, 6); K1, K3 and K4 closed. 0.4: enrollment memory rule uses the installed memory (4.4); old sample values and out-of-range values no longer block start (5.1). Not implemented. |
 | Applies  | RestoreSafe (key sets, RestoreSafe SPEC-core 4.4) and MountSafe (vault header, MountSafe SPEC-core 5.1) |
 | Origin   | Review of SPEC-refactoring 5.4, refactoring round after 2.1.0                                      |
 | Sources  | RFC 9106 sections 4 and 7; OWASP Password Storage Cheat Sheet                                       |
@@ -142,8 +142,8 @@ Windows limits allocations by the commit limit (RAM plus page file), not by phys
 
 Only the last case needs the user. Therefore, before every derivation:
 
-1. Read the total and available physical memory and the available commit (`GlobalMemoryStatusEx`: `ullTotalPhys`, `ullAvailPhys`, `ullAvailPageFile`).
-2. **Enrollment:** if m is larger than half the total physical memory, refuse: *"These key settings need 8 GiB of memory; this PC has 8 GiB. Use at most 4 GiB."*
+1. Read the installed memory (`GetPhysicallyInstalledSystemMemory`), the total and available physical memory and the available commit (`GlobalMemoryStatusEx`: `ullTotalPhys`, `ullAvailPhys`, `ullAvailPageFile`). `ullTotalPhys` is lower than the installed memory by what the firmware and an integrated GPU reserve (an 8 GiB PC reports about 7.8 GiB), so the enrollment rule uses the installed memory; if that call fails, `ullTotalPhys` rounded up to the next GiB.
+2. **Enrollment:** if m is larger than half the installed memory, refuse: *"These key settings need 8 GiB of memory; this PC has 8 GiB. Use at most 4 GiB."* With the default of 4 GiB, a PC with 8 GiB installed passes.
 3. **Unlock, m larger than the available commit:** refuse, since the process would end: *"Opening these keys needs 4 GiB of memory, but Windows can provide only 3.1 GiB right now (memory and page file). Close other programs and try again."* – **Try again** / **Cancel**.
 4. **Unlock, m larger than the total physical memory minus 2 GiB:** ask: *"Opening these keys needs 4 GiB of memory; this PC has 5.9 GiB in all. Opening them can take very long. Close other programs and try again, or continue."* – **Try again** / **Continue** / **Cancel**.
 5. **Unlock, m larger than the available physical memory** (and neither 3 nor 4): no question. The progress text says *"Unlocking… Windows is making room in memory; this takes a few seconds longer."*
@@ -155,7 +155,9 @@ Only the last case needs the user. Therefore, before every derivation:
 - New key sets use the defaults of 4.1 unless `config.yaml` sets other values within 4.2.
 - Existing key sets are not changed; they are reused as before (RestoreSafe SPEC-core D5). When the current key set uses parameters below the enrollment minimum, the Keys card and the preflight say so and offer **New keys + full backup…**; nothing is forced.
 - The memory check of 4.4 runs before every derivation.
-- `config.yaml`: the argon2 settings keep their names; their documentation in `config-SAMPLE.yaml` says MiB (refactoring RF-98) and points to sections 2 and 3 of this spec. Values outside 4.2 are rejected at startup.
+- `config.yaml`: the argon2 settings keep their names; their documentation in `config-SAMPLE.yaml` says MiB (refactoring RF-98) and points to sections 2 and 3 of this spec. The argon2 values are used only when new keys are created, so they never stop RestoreSafe from starting, restoring or verifying:
+  - **The old sample block.** `config-SAMPLE.yaml` of 2.0 and 2.1 set `time: 3`, `memory_mb: 512`, `threads: 4`, and most configurations are copies of it. A block with exactly these three values is a retired default (GUI spec 11.6): it is ignored, so the defaults of 4.1 apply, and the start dialog of GUI spec ST-10 offers to remove it. Any other explicit value is the user's choice and is kept.
+  - **Values outside 4.2** load; the health check reports `ARGON2_OUT_OF_RANGE` (GUI spec 11.8) naming the key, its value and the limit. It blocks only a backup that creates new keys (the preflight says so, with the remedy); a backup that reuses the current key set, restore and verify are not affected. Values are never capped silently.
 
 ### 5.2 Compatibility
 
