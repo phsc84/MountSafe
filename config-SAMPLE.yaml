@@ -15,4 +15,8 @@ password_min_length: 12
 # Seconds after a change at which modified data and metadata are written to the vault at the latest
 write_back_seconds: 5
 
+# Unmount every vault before the PC sleeps or hibernates, so that no key is in memory then (core spec 10.3).
+# Open files on the drive are closed by force.
+unmount_on_sleep: false
+
 log_level: "info"

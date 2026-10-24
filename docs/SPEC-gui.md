@@ -49,6 +49,8 @@ One row per vault from `config.yaml` (SPEC-core 7.1): name, path, status. Double
 | In use on PC-OFFICE | Lock held by another mount (tooltip: user and since when, SPEC-core 6.2). | disabled | disabled |
 | Locked by an earlier session | The lock is an orphan of a session on this PC that ended while the NAS was unreachable (SPEC-core 6.2 step 2). Tooltip: *"The NAS releases it a few minutes after the connection is back."* | enabled; waits (5.2) | disabled |
 | Mounted on P: – connection lost since 21:35 | The NAS is unreachable during the mount; MountSafe waits for it (SPEC-core 6.6). | disabled | enabled; drops what is not committed and says so (5.3) |
+| Mounted on P: – the NAS is full | A commit failed for lack of space; 120 MB of changes are waiting, new writes are refused (SPEC-core 6.9). Tooltip: *"Free space on the NAS, or delete files on P:; MountSafe tries again every 30 seconds."* | disabled | enabled; drops what is not committed and says so (5.3) |
+| Needs a newer MountSafe | A vault file has a higher format version than this MountSafe knows (SPEC-core 5). | disabled | disabled |
 | Not reachable | Path not available (NAS off, drive not connected) and not found on another drive letter (SPEC-core 7.5). Tooltip names the remedy. | disabled | disabled |
 | Found on E: and G: | Not at its path, but on several other drive letters (SPEC-core 7.5). | enabled; asks which (5.2) | disabled |
 | Damaged | No valid header copy, or the copies differ (SPEC-core 5.1). Tooltip names the remedy. | disabled | disabled |
@@ -64,15 +66,23 @@ The status is refreshed at start, after every action, with `F5`, and every 30 se
 - **Create vault…** (`Ctrl+N`) – 5.1.
 - **Add existing vault…** – 5.4. Needed to mount on a second PC a vault that was created on another one.
 
-### 2.3 WinFsp missing
+### 2.3 Banners
 
-When WinFsp cannot be loaded, a banner at the top says so and offers **Install WinFsp…**, which opens winfsp.dev in the browser. Mount is disabled; Create vault and Add existing vault stay available. The banner disappears with `F5` after installation.
+At most two banners at the top of the window, above the vault list:
+
+- **WinFsp missing.** When WinFsp cannot be loaded, a banner says so and offers **Install WinFsp…**, which opens winfsp.dev in the browser. Mount is disabled; Create vault and Add existing vault stay available. The banner disappears with `F5` after installation.
+- **System drive not encrypted** (SPEC-core 10.3). When BitLocker does not protect the system drive: *"This PC's system drive is not encrypted. While a vault is mounted, its keys can reach the page file or the hibernation file, and with them someone who steals this PC could open the vault."* – **How to turn on BitLocker…** (opens Settings > Privacy & security > Device encryption, or BitLocker in the Control Panel where that page does not exist) / **Dismiss** (until the next start). It does not block anything.
 
 ### 2.4 Closing the window
 
 - No vault mounted: MountSafe exits.
 - Vaults mounted: *"2 vaults are mounted (P:, Q:). Closing MountSafe unmounts them."* – **Unmount and close** / **Cancel**. Mounts live only as long as the process (SPEC-core 6.7).
 - Minimizing keeps MountSafe running in the taskbar. No tray icon in version 1.
+- **Logoff and shutdown** with mounted vaults: no dialog of MountSafe's own. While it commits and unmounts, Windows' "These apps are preventing shutdown" screen shows *"MountSafe is writing changes to the vault Private."* (SPEC-core 6.7); the entry disappears by itself when the vaults are unmounted.
+
+### 2.5 Started a second time
+
+Starting `MountSafe.exe` while it already runs for this user brings the running window to the front, restored if it was minimized; the second process ends without a window (SPEC-core 7.7).
 
 ## 3. Unlock dialog
 
@@ -96,7 +106,7 @@ Used by Mount (5.2). Shows the vault name and what is needed:
 - Long steps (unlocking, mounting, unmounting with a cache flush) show a progress text in the vault's status cell; the window stays responsive.
 - A lost connection to the NAS during a mount is not a dialog: the status cell shows *"Mounted on P: – connection lost since 21:35"* until the NAS answers again (SPEC-core 6.6). If the lock was lost for good, a message box names the unsaved changes that were lost, and the status becomes *Read-only (lock lost)*.
 - Errors appear in a message box that names the vault and ends with the `Remedy:` of SPEC-core 9.
-- Problems found while mounted (SPEC-core 6.8: damaged, missing, hidden entries, folders that cannot be listed) are not shown as dialogs as they occur. The vault row shows *"Mounted on P: – 3 problems"* with a **Show problems** link. It opens a list with the plaintext path, what was found (*"Changed or damaged"*, *"Deleted outside MountSafe"*, *"Added outside MountSafe – hidden"*, *"Older copy – hidden"*, *"Folder can't be listed"*) and the remedy: restore from the vault's backup, or **Accept vault as found** (5.6) after unmounting when the changes are known to be harmless. When the list has *"Changed or damaged"*, *"Older copy"* or *"Folder can't be listed"* entries, it also says: *"If the NAS lost power while this vault was in use, this is the likely cause: the changes of its last moments did not reach its disk (SPEC-core 6.4)."* The list lives in memory only; the log names entries by plaintext path only at `log_level: debug` (SPEC-core 7.3).
+- Problems found while mounted (SPEC-core 6.8: damaged, missing, hidden entries, folders that cannot be listed) are not shown as dialogs as they occur. The vault row shows *"Mounted on P: – 3 problems"* with a **Show problems** link. It opens a list with the plaintext path, what was found (*"Changed or damaged"*, *"Deleted outside MountSafe"*, *"Added outside MountSafe – hidden"*, *"Older copy – hidden"*, *"Folder can't be listed"*) and the remedy: restore from the vault's backup, or, when the changes are known to be harmless, **Accept these changes** in the list itself (SPEC-core 7.6: only the listed entries are checked and accepted, in seconds; a confirmation first: *"Accept these 3 changes? MountSafe accepts the files and folders as they are now on the NAS, including any change someone else made to them. Damaged files stay damaged."* – **Accept** / **Cancel** (default)). **Accept vault as found** (5.6) is for when the whole vault is affected. When the list has *"Changed or damaged"*, *"Older copy"* or *"Folder can't be listed"* entries, it also says: *"If the NAS lost power while this vault was in use, this is the likely cause: the changes of its last moments did not reach its disk (SPEC-core 6.4)."* The list lives in memory only; the log names entries by plaintext path only at `log_level: debug` (SPEC-core 7.3).
 
 ## 5. Dialogs
 
@@ -127,7 +137,7 @@ To change them, create a new vault and copy your files into it.
 
 Validation:
 
-- Name: 1–64 characters, unique in the list.
+- Name: 1–64 characters of letters, digits, space, `-`, `_`, `.`, `(` and `)`, unique in the list regardless of case (SPEC-core 7.1); another character: *"Use letters, digits, spaces and - _ . ( ) only; the name also names the network drive."*
 - Folder: must exist and be empty, or not exist yet (created). A folder that already contains a vault: *"This folder already contains a vault. Use Add existing vault."*
 - Drive letter: free letters only; default the first free letter from P.
 - Password: `password_min_length` (SPEC-core 11), both fields equal. Hidden for mode 3.
@@ -158,7 +168,7 @@ Validation:
 
 ### 5.4 Add existing vault
 
-Folder picker, then name and drive letter. MountSafe reads both header copies without unlocking (SPEC-core 7.2) and refuses folders that contain no valid vault header. The vault is added to the list; nothing in the vault is changed.
+Folder picker, then name and drive letter. MountSafe reads both header copies without unlocking (SPEC-core 7.2) and refuses folders that contain no valid vault header; a vault of a newer format is refused with *"This vault was written by a newer MountSafe. Update MountSafe to add it."* (SPEC-core 5). The vault is added to the list; nothing in the vault is changed.
 
 If the vault is already in the list (same `vault_id`, SPEC-core 7.1) at another path: *"This vault is already in the list as Private (E:\Vaults\Private). Use the new folder for it?"* – **Use new folder** / **Cancel**. The entry keeps its name, drive letter and state counter.
 
@@ -189,4 +199,10 @@ Then the unlock dialog (3). Every file is read once (SPEC-core 7.6); the status 
 - External drive connected again with another drive letter: the new path appears in the list; a second copy on another drive: *Found on E: and G:* and the choice at Mount.
 - Add existing vault with a vault that's already in the list at another path.
 - Close window with mounted vaults; Windows log off with mounted vaults.
+- Shut down while a large copy onto P: is being committed: Windows' shutdown screen names MountSafe; waiting lets the commit finish and the vault mounts cleanly next time; **Shut down anyway** leaves an interrupted commit that the next mount recovers.
+- Sleep with a vault mounted: after waking, the vault works again (or shows *connection lost* until the NAS answers). With `unmount_on_sleep: true`: the vault is unmounted before sleeping.
+- NAS full during a copy: the *NAS is full* status, the copy fails with "disk full", deleting a file on P: or freeing space on the NAS lets the waiting changes through.
+- System drive without BitLocker: the banner of 2.3; **Dismiss** hides it until the next start.
+- `MountSafe.exe` started twice: the first window comes to the front, no second window.
+- **Accept these changes** in the problem list after deleting and adding a file in the vault folder from outside: only those entries are checked, the problems disappear.
 - Keyboard only: every action reachable; Narrator reads the list and the dialogs.
