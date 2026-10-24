@@ -2,7 +2,7 @@
 
 |                |                                                                                       |
 | -------------- | ------------------------------------------------------------------------------------- |
-| Status         | Draft 0.7 (2026-10-24). Not implemented.                                               |
+| Status         | Draft 0.8 (2026-10-24). Not implemented.                                               |
 | Platform       | Windows 11 64-bit only. User interface in English only.                                |
 | Prerequisite   | WinFsp installed by the user (not bundled).                                            |
 | Related        | RestoreSafe (phsc84/RestoreSafe). MountSafe is a separate tool; RestoreSafe needs no changes for it. Both follow SPEC-kdf.md, which also changes RestoreSafe (SPEC-kdf 5). |
@@ -19,7 +19,7 @@ The current state of the vault is the truth. MountSafe keeps no versions and no 
 
 1. **Same protection level as RestoreSafe.** AES-256-GCM, Argon2id, key sets with slots, password / password + YubiKey / YubiKey-only, recovery code. File contents, file and folder names, the folder hierarchy, attributes and timestamps are encrypted.
 2. **Tamper-evident.** Any modification of a vault file's bytes, swapping contents between files, moving an entry to another folder, truncating a file, deleting or adding an entry outside MountSafe, replacing a file, a part of a file or a folder with an older copy, and replacing the whole vault with an older copy (10.1) are detected and reported; MountSafe never returns altered data as if it were intact.
-3. **Robust on a NAS.** Each file is encrypted separately. A network drop or crash affects at most the files being written at that moment, never the whole vault.
+3. **Robust on a NAS.** Each file is encrypted separately. A network drop or a crash of the PC affects at most the files being written at that moment, never the whole vault. A power loss of the NAS itself can lose its last confirmed writes (4.1, 6.4); they are reported, never returned as intact.
 4. **Standalone.** `MountSafe.exe` plus the WinFsp runtime. No account, no server, no internet connection.
 
 ### 1.2 Not supported (see section 13 for optional enhancements)
@@ -234,7 +234,7 @@ otherwise (incl. B < 44) -> damaged
 AES-256-GCM with random 96-bit nonces stays within the NIST bound up to 2^32 encryptions per key. Per key:
 
 - `file_key`: one encryption per chunk write of that file. 2^32 chunk writes of 64 KiB are 256 TiB written into one file; not reachable in practice.
-- `name_key`: one encryption per create, rename, move, attribute change or time change in the whole vault. Time changes are coalesced (6.5), so typical use stays many orders of magnitude below 2^32. A future vault check (13.5) would warn above 2^30 entries.
+- `name_key`: one encryption per create, rename, move, attribute change or time change in the whole vault. Time changes are coalesced (6.5), so typical use stays many orders of magnitude below 2^32: a million renames a day would take more than ten years. MountSafe does not count them; a counter in the vault state that warns above 2^30 name encryptions would be part of the vault check (13.5).
 - `manifest_key`: one encryption per manifest write, at most one per changed folder and commit (6.4).
 - `state_key`: two encryptions per commit. 2^32 would take one commit per second without pause for 68 years; commits happen only after changes, so typical use stays far below.
 - Slots: as in RestoreSafe.
@@ -366,7 +366,7 @@ A failing entry is hidden and reported (6.8); the folder stays usable. A folder 
 | Delete file | Delete the encrypted file (and `.ln`). Delete-on-close is honoured. |
 | Delete folder | Only when empty (Windows semantics): delete the storage folder, then the folder entry. |
 | Folder times | Creating, deleting or renaming an entry updates the parent folder's last-write time, as NTFS does (coalesced, 6.5). |
-| Free space | `GetDiskFreeSpaceEx` of the vault folder. |
+| Free space | `GetDiskFreeSpaceEx` of the vault folder, minus the uncommitted changes and a reserve (6.9). |
 | Not supported | Alternate data streams, reparse points, hard links, extended attributes, security descriptor changes (a fixed descriptor grants the current user full access). |
 
 Every change also updates the folder manifests concerned (a move changes two) and, with them, the vault state; both are written by the next commit (6.4). A deleted folder is removed from the vault state.
@@ -458,6 +458,8 @@ Therefore:
 | Interrupted commit | On mount: the current state is an intent | Recovery (6.4); files found damaged are reported. |
 | Vault changed by another mount while this one was cut off (6.6) | After a dropped session, on re-opening the lock: the epoch is not the one this mount wrote last | Nothing is committed; the volume becomes read-only; the unsaved changes are named. |
 | One header copy changed or damaged | On mount: the copies differ (5.1) | The other copy is used; the damaged one is reported, with an offer to repair it. A changed copy never makes a correct credential look wrong. |
+| A vault file of a newer format version (5) | When it is read | Not damage: the vault is not mounted (*Needs a newer MountSafe*), nothing is written. |
+| A reparse point (link) in the vault folder (12) | When it is opened | Not followed; treated as a damaged entry, or as a damaged vault when it replaces a header, state or lock file. |
 | Neither state slot valid | On mount | The vault cannot be mounted; remedy: restore `vault.state.a` and `.b` from a snapshot or backup, or **Accept vault as found** (7.6). |
 | Power loss of the NAS host while the vault was in use (6.4) | Not as such: it shows as some of the findings above (older state, older or damaged files, folders that cannot be listed) for what was written in the last moments | As those findings. Every report of an older state or older copies says that a power loss of the NAS is a possible cause (SPEC-gui 4, 5.2). |
 
@@ -470,7 +472,7 @@ Therefore:
 A write to the NAS that fails with `ERROR_DISK_FULL` or `ERROR_HANDLE_DISK_FULL` is treated like a network error (6.6): the commit fails, the changes stay in memory, nothing is lost, and the current state stays the last commit or the intent of the failed commit (both valid; 6.4).
 
 - The vault's row shows *"Mounted on P: – the NAS is full; 120 MB of changes are waiting"* (SPEC-gui 4).
-- New writes are refused with `STATUS_DISK_FULL` while the failed commit is pending, so the memory does not fill up and applications see the usual "disk full" error. Reads, renames within the cache and deletes still work; a delete that frees space lets the next commit try again.
+- New writes of file content are refused with `STATUS_DISK_FULL` while the failed commit is pending, so the memory does not fill up and applications see the usual "disk full" error. Reads, renames and deletes are still accepted: they become part of the next attempt, and a delete that frees space lets it try again at once.
 - MountSafe tries again every 30 seconds and after every delete, each time with a merged snapshot whose deletions come first (6.4). **Unmount** while it is pending drops what is not committed and says which plaintext paths are affected.
 - The free space reported to Windows (`GetVolumeInfo`) is the NAS's free space minus the size of the uncommitted changes and their tag tables, minus a reserve for the next state and manifest writes (twice the size of the current vault state plus the largest pending manifest), so that Windows and applications stop before the NAS is completely full.
 
@@ -481,13 +483,19 @@ A write to the NAS that fails with `ERROR_DISK_FULL` or `ERROR_HANDLE_DISK_FULL`
 MountSafe keeps a list of known vaults in `config.yaml` next to the executable or at `-config`: display name, path, `vault_id` (read from the header without unlocking), preferred drive letter, and the highest state counter this PC has seen (`seen_state`, 6.2 and 6.7). It contains no secrets.
 
 - **Display names** are 1 to 64 characters of letters, digits, space, `-`, `_`, `.`, `(` and `)`, unique in the list regardless of case. They name the network drive (`\mountsafe\<name>`, 6.2 step 8), so they hold no character a UNC path cannot.
-- **`config.yaml` is written safely:** MountSafe re-reads the file, changes only its own keys (the vault list), writes `config.yaml.tmp`, flushes it and renames it over `config.yaml`, so a crash or power loss leaves either the old or the new file, never a half-written one. Comments and the order of the user's own lines are kept. The GUI maintains the list: a created vault is added automatically, an existing vault (for example created on another PC) is added with **Add existing vault…** (SPEC-gui 5.4). Adding a folder whose `vault_id` is already in the list updates that entry's path instead of adding a second entry.
+- **`config.yaml` is written safely:** MountSafe re-reads the file, changes only its own keys (the vault list), writes `config.yaml.tmp`, flushes it and renames it over `config.yaml`, so a crash or power loss leaves either the old or the new file, never a half-written one. Comments and the order of the user's own lines are kept.
+- **Maintained by the GUI:** a created vault is added automatically, an existing vault (for example created on another PC) is added with **Add existing vault…** (SPEC-gui 5.4). Adding a folder whose `vault_id` is already in the list updates that entry's path instead of adding a second entry.
 
 `seen_state` is what detects a vault replaced with an older copy (6.8). It works only on PCs that have used the newer state, and it is not protected against someone who can edit `config.yaml` on this PC (10.2).
 
 ### 7.2 Startup check (no password)
 
 For each known vault: reachable, both header copies structurally valid and identical, `vault_id` as in the list, `vault.lock` free or held (and by whom), WinFsp installed. A vault that is not found at its path is searched for on other drive letters (7.5).
+
+Without the credentials, the startup check cannot tell which of two differing header copies is the intact one (the HMAC needs V, 5.1). So:
+
+- **Both copies structurally invalid:** the vault is *Damaged*; it cannot be mounted.
+- **The copies differ, or one is structurally invalid:** the vault can still be mounted (*Not mounted – a header copy differs*); the mount decides after unlocking which copy is intact, uses it, and offers to repair the other (5.1).
 
 ### 7.3 Log
 

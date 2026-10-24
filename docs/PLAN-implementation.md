@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Status | Prepared 2026-10-24, decisions O1–O4 taken; not started |
-| Implements | [SPEC-core.md](SPEC-core.md) Draft 0.7, [SPEC-gui.md](SPEC-gui.md) Draft 0.5, [SPEC-kdf.md](SPEC-kdf.md) Draft 0.3 |
+| Implements | [SPEC-core.md](SPEC-core.md) Draft 0.8, [SPEC-gui.md](SPEC-gui.md) Draft 0.6, [SPEC-kdf.md](SPEC-kdf.md) Draft 0.3 |
 | Prepared by | The spike of core spec 14.5 (done 2026-10-24, results in its table) and the review of core spec 4–7 (2026-10-24) |
 | Branch | `dev`; a milestone that takes long may get `feature-<name>` (CONTRIBUTING.md section 1) |
 | Copied code | From RestoreSafe `v2.1.1` (`45e02c5`) unless an item says otherwise |

@@ -2,7 +2,7 @@
 
 |          |                                                                 |
 | -------- | --------------------------------------------------------------- |
-| Status   | Draft 0.5 (2026-10-24). Not implemented.                         |
+| Status   | Draft 0.6 (2026-10-24). Not implemented.                         |
 | Core     | [SPEC-core.md](SPEC-core.md), [SPEC-kdf.md](SPEC-kdf.md) |
 | Language | English only.                                                    |
 
@@ -53,7 +53,8 @@ One row per vault from `config.yaml` (SPEC-core 7.1): name, path, status. Double
 | Needs a newer MountSafe | A vault file has a higher format version than this MountSafe knows (SPEC-core 5). | disabled | disabled |
 | Not reachable | Path not available (NAS off, drive not connected) and not found on another drive letter (SPEC-core 7.5). Tooltip names the remedy. | disabled | disabled |
 | Found on E: and G: | Not at its path, but on several other drive letters (SPEC-core 7.5). | enabled; asks which (5.2) | disabled |
-| Damaged | No valid header copy, or the copies differ (SPEC-core 5.1). Tooltip names the remedy. | disabled | disabled |
+| Not mounted – a header copy differs | The two header copies differ, or one is unreadable (SPEC-core 7.2). Tooltip: *"MountSafe uses the intact copy when you mount and offers to repair the other."* | enabled | disabled |
+| Damaged | Neither header copy is readable (SPEC-core 7.2). Tooltip names the remedy: restore `vault.msv` from a NAS snapshot or backup. | disabled | disabled |
 | Read-only (lock lost) | The lock was lost during the mount, or the vault was changed by another mount while this one was cut off (SPEC-core 6.6). Tooltip names which. | disabled | enabled |
 
 The status is refreshed at start, after every action, with `F5`, and every 30 seconds while the window is visible. When a vault is found on another drive letter (SPEC-core 7.5), the path column shows the new path; the change is in the log, no dialog.
@@ -156,7 +157,7 @@ Validation:
 1. If the vault was found on several drive letters (SPEC-core 7.5): *"Private was found on E:\Vaults\Private and G:\Vaults\Private. One of them may be an older copy, for example a backup."* – one button per path / **Cancel**. The chosen path is saved in `config.yaml`.
 2. If the lock is an orphan of an earlier session on this PC (SPEC-core 6.2 step 2): *"Private is still locked by an earlier MountSafe session on this PC that ended while the NAS was unreachable. The NAS releases the lock a few minutes after the connection is back."* – **Wait** (default) / **Cancel**. While waiting, the status cell shows *"Waiting for the NAS to release the lock…"* and the mount continues by itself when it is free; **Cancel** stays available.
 3. If the preferred drive letter is taken: a small dialog to choose a free letter (remembered in `config.yaml`).
-4. Unlock dialog (3).
+4. Unlock dialog (3). If one header copy turns out to be damaged (SPEC-core 5.1): *"One of the two header copies of Private is damaged. MountSafe opened the vault with the intact copy. Repair the damaged copy from it?"* – **Repair** (default) / **Later** (asked again at the next mount).
 5. If the last commit was interrupted (SPEC-core 6.2 step 5, 6.4), the files being written then are checked while *"Checking files from an interrupted session…"* shows in the status cell. If any is damaged: *"Private was not closed properly when it was last used. 4 files being written at that time were checked; 1 is damaged."* – **Show problems** / **OK**. If none is damaged, nothing is shown.
 6. If the vault is older than when this PC last used it (SPEC-core 6.2 step 6), a warning dialog: *"This copy of Private is older than the one this PC used last (state 1,200; last used 1,234). Someone may have replaced the vault with an older copy, it was restored from a backup or snapshot on purpose, or the NAS lost power while the vault was in use and its last changes did not reach its disk. Changes made after that state are not in it."* – **Use this older state** / **Cancel** (default).
 7. Mount (SPEC-core 6.2). On success the status changes to *Mounted on P:* and Explorer opens the drive.
