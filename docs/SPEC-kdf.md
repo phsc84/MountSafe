@@ -2,7 +2,7 @@
 
 |          |                                                                                                   |
 | -------- | ------------------------------------------------------------------------------------------------- |
-| Status   | Draft 0.3 (2026-10-24): defaults decided and measured (sections 4.1, 6); K1 closed. Not implemented. |
+| Status   | Draft 0.3 (2026-10-24): defaults decided and measured (sections 4.1, 6); K1 and K4 closed. Not implemented. |
 | Applies  | RestoreSafe (key sets, RestoreSafe SPEC-core 4.4) and MountSafe (vault header, MountSafe SPEC-core 5.1) |
 | Origin   | Review of SPEC-refactoring 5.4, refactoring round after 2.1.0                                      |
 | Sources  | RFC 9106 sections 4 and 7; OWASP Password Storage Cheat Sheet                                       |
@@ -199,4 +199,4 @@ MountSafe uses the same defaults and limits from its first version (MountSafe SP
 | K1 | t=1 (optimal per unit of time; new backups need this version to restore) or t=2 at 4 GiB (twice the unlock time, about three times the attacker cost, 2.0 and 2.1 can still restore; 2.4, 5.2)? | **Decided 2026-10-24: t=2.** 4.35 s on the development PC (section 6), within the budget, and the second pass costs only about 1.4 s. |
 | K2 | Enrollment minimum 1 GiB, or 2 GiB (RFC 9106's first recommended option)? | 1 GiB, so 4 GB machines can still create keys; the default is what matters. |
 | K3 | `password_min_length` stays 12, or rises with this change? | Decide here: in mode 1 the password's strength and these parameters together set the attacker's cost (section 3). |
-| K4 | Release as 2.2.0 (format unchanged, ranges extended) or 3.0.0? | 2.2.0, with the compatibility note of 5.2 in the release notes. |
+| K4 | Release as 2.2.0 (format unchanged, ranges extended) or 3.0.0? | **Decided 2026-10-24: 2.2.0**, with the compatibility note of 5.2 in the release notes. The format does not change; every older backup opens; backups with the new default keys (4 GiB, t=2) also restore with 2.0 and 2.1, whose limits include 4096 MiB and t=2 (`cryptox` `MaxArgonMemoryKB`, `MinArgonTime`). |
