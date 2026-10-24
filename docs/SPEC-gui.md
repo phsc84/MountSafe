@@ -87,8 +87,8 @@ Used by Mount (5.2). Shows the vault name and what is needed:
 - **Use your recovery code instead** (when the vault has a recovery slot): replaces the fields with one recovery code field (6 groups of 5, case and dashes ignored, checksum checked before Argon2, as RestoreSafe).
 - Wrong password: *"The password is not correct."* Up to 3 attempts, then the dialog closes.
 - YubiKey refused (wrong YubiKey, reset YubiKey, wrong PIN, cancelled prompt; Windows reports these alike): *"The YubiKey did not unlock this vault."* – **Try again** / **Use recovery code** / **Cancel**.
-- Before Argon2 starts, the memory check of SPEC-kdf 4.4 runs. Too little free memory: *"Opening this vault needs 4 GiB of free memory; 2.6 GiB are free. Close other programs and try again, or continue (this can take very long)."* – **Try again** / **Continue** / **Cancel**.
-- While Argon2 runs (a few seconds with the default 4 GiB), the dialog shows *"Unlocking…"* and stays responsive; **Cancel** is available.
+- Before Argon2 starts, the memory check of SPEC-kdf 4.4 runs. It interrupts only when the memory cannot be had (step 3, **Try again** / **Cancel**) or comes close to all of this PC's memory (step 4, **Try again** / **Continue** / **Cancel**), with the texts given there. Less free memory than the vault needs is no question: Windows makes room, and the unlock takes a few seconds longer.
+- While Argon2 runs (about 4 s with the default 4 GiB on a 16 GB PC, 6–7 s while other programs use much of the memory; SPEC-kdf 6), the dialog shows *"Unlocking…"*, or *"Unlocking… Windows is making room in memory; this takes a few seconds longer."* (SPEC-kdf 4.4 step 5), and stays responsive; **Cancel** is available.
 - The password field is cleared and its memory zeroed after each attempt.
 
 ## 4. Progress and errors
@@ -179,7 +179,7 @@ Then the unlock dialog (3). Every file is read once (SPEC-core 7.6); the status 
 - Create a vault in each mode, with and without a recovery code; mount; copy files; unmount; mount on a second PC via Add existing vault.
 - Second PC while mounted on the first: status *In use on …*, Mount disabled.
 - Wrong password three times; wrong YubiKey; recovery code with typo and correct.
-- Mount with less free memory than the vault's Argon2id setting: the memory question appears; Try again, Continue and Cancel work.
+- Mount with less free memory than the vault's Argon2id setting (browser and office suite open): no question, the longer progress text, the vault mounts. Mount with a page file too small for it (SPEC-kdf 4.4 step 3): the refusal appears; Try again and Cancel work.
 - WinFsp uninstalled: banner, Mount disabled.
 - NAS disconnected while mounted: a few seconds (nothing visible), about a minute (*connection lost* status, then normal again, nothing lost), and long enough for the lock to be lost (read-only, lost changes named).
 - MountSafe ended while the NAS was unreachable, then Mount again: *Locked by an earlier session*, **Wait** mounts when the NAS releases the lock.

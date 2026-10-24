@@ -133,7 +133,7 @@ A vault can also be on a local or external drive (for example a USB SSD). NTFS i
 | `app_version`   | string         | MountSafe version that created the vault. |
 | `chunk_size`    | u32            | Must be 65536. |
 | `name_encoding` | string         | Must be `"base32"`. |
-| `key_set`       | object         | As RestoreSafe SPEC-core 4.4, with slot AAD prefix `"MountSafe v1 slot"` instead of `"RestoreSafe v2 slot"`. Argon2id defaults, limits and the memory check follow SPEC-kdf.md (default 4 GiB, p=4; t=1 or 2 per SPEC-kdf K1). |
+| `key_set`       | object         | As RestoreSafe SPEC-core 4.4, with slot AAD prefix `"MountSafe v1 slot"` instead of `"RestoreSafe v2 slot"`. Argon2id defaults, limits and the memory check follow SPEC-kdf.md (default 4 GiB, t=2, p=4). |
 
 Key hierarchy (RestoreSafe SPEC-core 4.4.1 up to V; Go standard `crypto/hkdf`):
 

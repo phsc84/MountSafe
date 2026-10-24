@@ -2,7 +2,7 @@
 
 |          |                                                                                                   |
 | -------- | ------------------------------------------------------------------------------------------------- |
-| Status   | Draft 0.2 (2026-10-20). Not implemented.                                                           |
+| Status   | Draft 0.3 (2026-10-24): defaults decided and measured (sections 4.1, 6); K1 closed. Not implemented. |
 | Applies  | RestoreSafe (key sets, RestoreSafe SPEC-core 4.4) and MountSafe (vault header, MountSafe SPEC-core 5.1) |
 | Origin   | Review of SPEC-refactoring 5.4, refactoring round after 2.1.0                                      |
 | Sources  | RFC 9106 sections 4 and 7; OWASP Password Storage Cheat Sheet                                       |
@@ -101,10 +101,12 @@ Extra passes reuse memory that is already allocated: they add time, not memory. 
 | Parameter | Default | Reason |
 | --------- | ------- | ------ |
 | m | **4 GiB** | Offline threat model; RFC 9106 4 steps 5–6: the largest memory the target machines can afford. Fits machines with 8 GB of RAM and more (4.4). |
-| t | **1 or 2** (K1) | 1 is optimal per unit of unlock time (2.4). 2 costs twice the time, gives about three times the attacker cost, and keeps backups readable by RestoreSafe 2.0 and 2.1 (5.2). Decided after the measurement of section 6. |
+| t | **2** (K1, decided 2026-10-24) | The second pass costs less than the first: on the development PC 4.35 s against 2.97 s for t=1 (section 6), because the first pass also includes getting 4 GiB of fresh memory from Windows. For about 1.4 s more, the attacker's cost per guess rises two- to threefold (2.4), and backups stay readable by RestoreSafe 2.0 and 2.1 (5.2). |
 | p | **4** | RFC 9106 4 step 4; uses four cores to fill 4 GiB in the time budget (2.2). |
 
-The unlock time with the defaults is measured on the development machine and on the weakest machine the user wants to restore on, and recorded in section 6. Target: under 5 seconds on the development machine.
+The unlock time with the defaults is measured on the development machine and on the weakest machine the user wants to restore on, and recorded in section 6. Target: under 5 seconds on the development machine with other programs closed; met with 4.35 s. In everyday use, with less memory free, it takes 6–7 s (section 6, 4.4).
+
+2 GiB with t=3 (3.13 s) was the alternative that always fits into the free memory of the development PC; by the cost model of 2.4 it costs an attacker about a third of the default per guess, so the default stays at 4 GiB.
 
 ### 4.2 Enrollment limits (what a new key set or vault may be created with)
 
@@ -132,11 +134,19 @@ The unlock time with the defaults is measured on the development machine and on 
 
 ### 4.4 Available memory
 
-Windows limits allocations by the commit limit (RAM plus page file), not by physical RAM. If m exceeds the free physical memory but the commit succeeds (the usual case with the default system-managed page file), Windows pages, and Argon2's random memory access makes the derivation orders of magnitude slower. If the commit limit is reached (page file disabled, fixed or full), the Go runtime ends the process with an out-of-memory error that `recover` cannot catch. Neither gives the user a clean message. Therefore, before every derivation:
+Windows limits allocations by the commit limit (RAM plus page file), not by physical RAM. Three cases:
 
-1. Read the available and total physical memory (`GlobalMemoryStatusEx`).
+- **m fits into the available physical memory:** the derivation runs at full speed.
+- **m is larger than the available memory, but well below the total physical memory:** Windows makes room by moving memory that other programs are not using into the page file. Measured on the development PC (section 6): 4 GiB with t=2 took 5.9–7.3 s with 4.1 GiB available instead of 4.35 s, and the other programs did not feel slower afterwards. This is the everyday case on a 16 GB PC with a browser and an office suite open.
+- **m comes close to the total physical memory, or exceeds what Windows can commit:** close to the total, the derivation itself is paged out, and Argon2's random memory access makes it orders of magnitude slower. Above the commit limit (page file disabled, fixed or full), the Go runtime ends the process with an out-of-memory error that `recover` cannot catch.
+
+Only the last case needs the user. Therefore, before every derivation:
+
+1. Read the total and available physical memory and the available commit (`GlobalMemoryStatusEx`: `ullTotalPhys`, `ullAvailPhys`, `ullAvailPageFile`).
 2. **Enrollment:** if m is larger than half the total physical memory, refuse: *"These key settings need 8 GiB of memory; this PC has 8 GiB. Use at most 4 GiB."*
-3. **Unlock:** if m is larger than the available physical memory, ask: *"Opening these keys needs 4 GiB of free memory; 2.6 GiB are free. Close other programs and try again, or continue (this can take very long)."* – **Try again** / **Continue** / **Cancel**.
+3. **Unlock, m larger than the available commit:** refuse, since the process would end: *"Opening these keys needs 4 GiB of memory, but Windows can provide only 3.1 GiB right now (memory and page file). Close other programs and try again."* – **Try again** / **Cancel**.
+4. **Unlock, m larger than the total physical memory minus 2 GiB:** ask: *"Opening these keys needs 4 GiB of memory; this PC has 5.9 GiB in all. Opening them can take very long. Close other programs and try again, or continue."* – **Try again** / **Continue** / **Cancel**.
+5. **Unlock, m larger than the available physical memory** (and neither 3 nor 4): no question. The progress text says *"Unlocking… Windows is making room in memory; this takes a few seconds longer."*
 
 ## 5. Changes in RestoreSafe
 
@@ -158,31 +168,35 @@ The format does not change: the slot's `kdf` object already carries `time`, `mem
 
 ### 5.3 Code
 
-- `cryptox`: two sets of bounds, `Enroll…` and `Read…`, replacing `MinArgon…`/`MaxArgon…`; `ValidateArgon2Params` takes which set applies. `DefaultArgon2Params` = 4 GiB, t per K1, p=4.
+- `cryptox`: two sets of bounds, `Enroll…` and `Read…`, replacing `MinArgon…`/`MaxArgon…`; `ValidateArgon2Params` takes which set applies. `DefaultArgon2Params` = 4 GiB, t=2, p=4.
 - Package config derives its bounds from the enrollment set.
 - A memory check (4.4) in `internal/security` or `fsx`, called by unlock and enrollment.
 
-## 6. Measurements (filled in during implementation)
+## 6. Measurements
 
-| Machine | RAM | m / t / p | Unlock time |
-| ------- | --- | --------- | ----------- |
-| Development PC | 16 GB | 512 MiB / 3 / 4 (old default) | |
-| Development PC | 16 GB | 4 GiB / 1 / 4 | |
-| Development PC | 16 GB | 4 GiB / 2 / 4 | |
-| Development PC | 16 GB | 8 GiB / 1 / 4 | |
-| Weakest restore machine | | 4 GiB / chosen t / 4 | |
+Measured 2026-10-24 with `tools/kdfbench` of MountSafe (`argon2.IDKey` as both tools call it, 32-byte key, median of 3 derivations; Go 1.27.2). Development PC: 8 logical CPUs, 16 GB RAM (13.9 GiB usable).
 
-Also record what happens at m close to and above the free memory on the 16 GB machine (paging vs. abort), to confirm 4.4.
+| Machine | RAM | m / t / p | Programs closed (≈ 7 GiB available) | Everyday (3.6–4.8 GiB available) |
+| ------- | --- | --------- | ----------------------------------- | -------------------------------- |
+| Development PC | 16 GB | 512 MiB / 3 / 4 (old default) | 0.64 s | 0.98 s |
+| Development PC | 16 GB | 2 GiB / 2 / 4 | | 2.22 s |
+| Development PC | 16 GB | 2 GiB / 3 / 4 | | 3.13 s |
+| Development PC | 16 GB | 4 GiB / 1 / 4 | 2.97 s | |
+| Development PC | 16 GB | **4 GiB / 2 / 4 (default)** | **4.35 s** | **5.9–7.3 s** (4.1 GiB available; 2 runs) |
+| Development PC | 16 GB | 8 GiB / 1 / 4 | not run: 7.1 GiB available | |
+| Weakest restore machine | | 4 GiB / 2 / 4 | | |
+
+**Above the available memory** (the everyday column of the default): Windows moved idle memory of other programs into the page file; the derivation took up to 3 s longer, the other programs did not feel slower afterwards, and nothing aborted. This is why 4.4 asks only near the total physical memory or above the commit limit. Not measured: m close to the total physical memory (8–12 GiB on this PC), which 4.4 step 4 covers without a measurement.
 
 ## 7. MountSafe
 
-MountSafe uses the same defaults and limits from its first version (MountSafe SPEC-core 5.1). It has no older vaults, so its read limits can equal its enrollment limits, and K1's compatibility argument does not apply to it: it can take t=1 or t=2 purely by unlock time. The memory check of 4.4 runs before Create vault and before every mount.
+MountSafe uses the same defaults and limits from its first version (MountSafe SPEC-core 5.1). It has no older vaults, so its read limits can equal its enrollment limits. K1's compatibility argument does not apply to it, but its unlock-time argument does, so it uses t=2 as well. The memory check of 4.4 runs before Create vault and before every mount.
 
 ## 8. Open questions
 
 | # | Question | Proposal |
 | - | -------- | -------- |
-| K1 | t=1 (optimal per unit of time; new backups need this version to restore) or t=2 at 4 GiB (twice the unlock time, about three times the attacker cost, 2.0 and 2.1 can still restore; 2.4, 5.2)? | Decide after the measurement of section 6: t=2 if the unlock time at 4 GiB stays within the budget, otherwise t=1. |
+| K1 | t=1 (optimal per unit of time; new backups need this version to restore) or t=2 at 4 GiB (twice the unlock time, about three times the attacker cost, 2.0 and 2.1 can still restore; 2.4, 5.2)? | **Decided 2026-10-24: t=2.** 4.35 s on the development PC (section 6), within the budget, and the second pass costs only about 1.4 s. |
 | K2 | Enrollment minimum 1 GiB, or 2 GiB (RFC 9106's first recommended option)? | 1 GiB, so 4 GB machines can still create keys; the default is what matters. |
 | K3 | `password_min_length` stays 12, or rises with this change? | Decide here: in mode 1 the password's strength and these parameters together set the attacker's cost (section 3). |
 | K4 | Release as 2.2.0 (format unchanged, ranges extended) or 3.0.0? | 2.2.0, with the compatibility note of 5.2 in the release notes. |
