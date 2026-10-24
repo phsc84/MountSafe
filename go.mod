@@ -10,6 +10,7 @@ tool (
 
 require (
 	github.com/winfsp/go-winfsp v1.0.6
+	golang.org/x/crypto v0.58.0
 	golang.org/x/sys v0.49.0
 )
 
