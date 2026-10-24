@@ -160,6 +160,32 @@ Put the Mac to sleep (Apple menu > Sleep), wait a minute, wake it. Note what `lo
 
 The commit order intent → data → commit holds after a power loss of the Mac only if `FlushFileBuffers` returns after the data is on its disk. macOS's `fsync` does not force the disk's own cache; whether the SMB server flushes further is what this checks.
 
+**First, without cutting the power: compare latencies.** Run `flush-write` for about 30 seconds and stop it with Ctrl+C; note the `FlushFileBuffers: median` line. Then, in Terminal on the Mac, in the shared folder (Perl comes with macOS; Python needs the developer tools):
+
+```sh
+perl - /Volumes/<volume>/<folder>/fsync-test.bin <<'EOF'
+use strict; use IO::Handle; use Time::HiRes qw(time);
+open(my $f, '>', $ARGV[0]) or die "$ARGV[0]: $!";
+binmode $f;
+sub measure {
+    my ($sync) = @_; my @t;
+    for (1 .. 200) {
+        syswrite($f, 'x' x 4096) or die $!;
+        my $start = time; $sync->(); push @t, time - $start;
+    }
+    @t = sort { $a <=> $b } @t;
+    return $t[100] * 1000;
+}
+printf "fsync       median %.2f ms\n", measure(sub { $f->sync or die "fsync: $!" });
+printf "F_FULLFSYNC median %.2f ms\n", measure(sub { fcntl($f, 51, 0) or die "F_FULLFSYNC: $!" });
+close $f; unlink $ARGV[0];
+EOF
+```
+
+If the flush from Windows takes less than `F_FULLFSYNC` plus a network round trip (item 5: about 0.7 ms), the SMB server does not wait for the flash, and the power cut below can only confirm a loss. On the target NAS (2026-10-24) it took 0.70 ms against 3.07 ms for `F_FULLFSYNC`; the power cut was not done, and the risk is accepted (core spec 4.1).
+
+**The power cut**, to see what is actually lost:
+
 On the PC:
 
 ```powershell
