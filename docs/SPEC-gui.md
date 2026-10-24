@@ -138,7 +138,7 @@ To change them, create a new vault and copy your files into it.
 Validation:
 
 - Name: 1–64 characters of letters, digits, space, `-`, `_`, `.`, `(` and `)`, unique in the list regardless of case (SPEC-core 7.1); another character: *"Use letters, digits, spaces and - _ . ( ) only; the name also names the network drive."*
-- Folder: must exist and be empty, or not exist yet (created). A folder that already contains a vault: *"This folder already contains a vault. Use Add existing vault."*
+- Folder: must exist and be empty, or not exist yet (created). A folder that already contains a vault: *"This folder already contains a vault. Use Add existing vault."* A folder with only the leftovers of an interrupted creation: the question of SPEC-core 6.1 (clear it and create). A folder on a MountSafe drive: *"A vault can't be created on a drive that MountSafe serves. Choose a folder on the NAS or a local drive."*
 - Drive letter: free letters only; default the first free letter from P.
 - Password: `password_min_length` (SPEC-core 11), both fields equal. Hidden for mode 3.
 - Recovery code checkbox: optional in mode 1, checked and disabled in modes 2 and 3.

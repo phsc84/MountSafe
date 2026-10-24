@@ -68,7 +68,7 @@ The vault as a library: everything core spec 6 and 7 do, on a folder, called fro
 
 | # | Item | Spec | Done when |
 |---|---|---|---|
-| M3.1 | `internal/mount`: the WinFsp callbacks of section 12, mapped onto the vault API; volume info, the fixed security descriptor | core 6.2 step 8, 6.3, 12 | Explorer, Office and the copies of spike item 1 work on a mounted vault |
+| M3.1 | `internal/mount`: the WinFsp callbacks of section 12, mapped onto the vault API; volume info, the fixed security descriptor | core 6.2 step 8, 6.3, 12 | Explorer, Office and the copies of spike item 1 work on a mounted vault; the minimum WinFsp version (the one tested) is recorded here and checked at start (core 6.2 step 1) |
 | M3.2 | Write-back cache and read-ahead in front of the vault, commit triggers (close, flush, timer, 64 MiB) | core 6.3, 6.4 | sequential throughput through the drive at least 80 % of the share's (14.4) |
 | M3.3 | Network interruptions: handles kept, the *connection lost* state, dead-handle detection, re-open with the epoch check, read-only | core 6.6 | 14.3 network tests, locally and on the NAS |
 | M3.4 | Unmount, also at logoff and shutdown | core 6.7 | open files, forced unmount, logoff with a mounted vault |

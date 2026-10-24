@@ -319,6 +319,8 @@ Plaintext (integers big-endian):
 ### 6.1 Create a vault
 
 1. In the Create vault window (SPEC-gui 5.1) the user chooses an empty folder (typically on the NAS), a name, a drive letter and an authentication mode; `password_min_length` and the recovery code rules are as in RestoreSafe (SPEC-core 6.3, 6.6 there).
+   - **Not on a MountSafe drive.** A folder on a drive that MountSafe itself serves (a vault inside a mounted vault) is refused: MountSafe would call its own file system and could block itself. The same holds for **Add existing vault** (7.1).
+   - **Leftovers of an interrupted creation.** A folder that holds only what step 4 writes before the header (`d\`, `vault.state.a`, `vault.msv.tmp`, no `vault.msv` and no `vault.msv.bak`) is the rest of a creation that was cut off. It is not a vault and holds no data: Create offers to clear it (*"This folder holds the rest of a vault creation that did not finish. Clear it and create the vault?"*). Any other content means the folder is not empty.
 2. Enrollment as in RestoreSafe SPEC-core 6.3: password, YubiKey registration (own WebAuthn RP ID `mountsafe`, so RestoreSafe and MountSafe credentials are independent), recovery code (always with a YubiKey, optional in mode 1).
 3. Check the available memory against the Argon2id parameters (SPEC-kdf 4.4, enrollment). Generate V and `vault_id`, create the slots and check that each unwraps before anything is written.
 4. Create `d\` and the root storage folder with an empty `folder.m` (5.7); write `vault.state.a` with epoch 1 (5.8); write `vault.msv` and `vault.msv.bak` (5.1) last, so a folder with a header is always a complete vault; set the vault time on everything (5.6).
@@ -328,7 +330,7 @@ The creation dialog states that the password, YubiKey and recovery code of a vau
 
 ### 6.2 Mount
 
-1. Check that WinFsp is installed (`winfsp.LoadWinFSP`); if not, explain how to install it (link to winfsp.dev) and stop. Nothing has been read, unlocked or written yet.
+1. Check that WinFsp is installed (`winfsp.LoadWinFSP`) in at least the version MountSafe was tested with (recorded in PLAN-implementation M3.1 and checked from the DLL's version resource); if not, explain how to install or update it (link to winfsp.dev) and stop. Nothing has been read, unlocked or written yet.
 2. Open `vault.lock` (create if missing) with read/write access and share mode `FILE_SHARE_READ` and keep the handle open for the whole mount. On a sharing violation, open it read-only and read who holds it:
    - **Another PC, or a MountSafe process on this PC that is running:** *"This vault is mounted on PC-OFFICE by philip since 2026-10-20 08:12."* Nothing else happens.
    - **This PC, and the process in the lock is not a running MountSafe of that session:** the lock is an orphan of an earlier session on this PC that ended (crash, kill, power loss) while the NAS was unreachable. The NAS keeps such an open for a few minutes after the connection is back (about 3 minutes on the target NAS, 14.5 item 4) and then releases it. MountSafe says so and offers to wait: it tries again every 5 seconds and continues with step 3 as soon as the lock is free (6.6).
@@ -340,7 +342,7 @@ The creation dialog states that the password, YubiKey and recovery code of a vau
 7. Remember the current epoch for this vault (7.1).
 8. Mount as a network drive (volume prefix `\mountsafe\<vault name>`) on the chosen drive letter; case-insensitive, case-preserving.
 
-Directory index: on the first access to a folder, list its storage folder, decrypt every name, read and decrypt `folder.m`, check its digest against the vault state, and keep a map from case-folded name (Windows upper-case mapping) to entry, including attributes and times. Validation on load:
+Directory index: on the first access to a folder, list its storage folder, decrypt every name, read and decrypt `folder.m`, check its digest against the vault state, and keep a map from case-folded name to entry, including attributes and times. Case folding uses a table compiled into MountSafe (the simple uppercase mapping of one fixed Unicode version, as NTFS's upcase table), never the running Windows' tables: Windows versions differ in a few characters, and a vault must fold the same on every PC, or two names that are distinct on one PC could collide on another and one of them would be reported as damaged. Validation on load:
 
 - every name authenticates, suffix and type match, no two entries with the same case-folded name, long-name pairs complete;
 - every entry on disk is in the manifest with the same entry ID, type and name digest, and every file with the plaintext size the manifest records (5.7);
@@ -378,6 +380,8 @@ Every change also updates the folder manifests concerned (a move changes two) an
 
 **A commit works on a snapshot.** When it starts, it takes every change collected so far: the modified chunks with their tag table entries, names, metadata, created and deleted entries. Writes that arrive while it runs are collected for the next commit; a chunk that is changed again while the commit writes it is changed in a copy, so the commit writes exactly the chunks its tag tables and manifests describe. Reads see the newest data throughout: the next commit's changes, then the running commit's snapshot, then the vault.
 
+**A failed commit is not repeated as it was.** When a commit fails (network error, 6.6; NAS full, 6.9), its changes stay in memory and its intent stays the current state. The next attempt merges the failed snapshot with everything collected since into one new snapshot, and writes a new intent for it (its pending list covers both). So a delete made after the failure is part of the next attempt, and within the data step **deletions come first**: entries and storage folders that the snapshot deletes are removed before chunks are written, so that the space they free is there for the writes.
+
 A commit has three steps (D16):
 
 1. **Intent.** Write the next state slot (5.8): the folder table unchanged, the pending list naming every file whose content changes and every folder whose manifest changes (the folder of a changed file is always among them). Flush.
@@ -387,7 +391,7 @@ A commit has three steps (D16):
 After a crash, a lost connection or a killed process, the current state is either the last commit (the intent was torn, nothing else written) or the intent. At the next mount (6.2), an intent is **recovered**:
 
 - Each pending folder: its manifest is rebuilt from the entries on disk whose names authenticate. A pending folder whose storage folder exists but is not in the folder table (created in the interrupted commit) is added to it; one whose storage folder no longer exists (deleted in the interrupted commit) is removed from it.
-- Each pending file: every chunk is read and authenticated, and the tag table and file digest are rebuilt from the chunks. A file with a chunk that fails authentication stays damaged (6.8).
+- Each pending file: every chunk is read and authenticated, and the tag table and file digest are rebuilt from the chunks. A chunk that fails authentication keeps its on-disk tag in the rebuilt table, so the file stays readable except in that chunk's 64 KiB, which return `STATUS_FILE_CORRUPT_ERROR` and are reported (6.8); the rest of the file is not lost with it.
 - Then a commit with the rebuilt manifests and nothing pending.
 - Entries outside the pending list are checked strictly as always. A recovery that found damaged files is reported (6.8); otherwise it is only logged.
 
@@ -420,12 +424,13 @@ Behaviour of the target NAS, measured in the spike (14.5 item 4):
 
 Therefore:
 
+- **Heartbeat.** While mounted, MountSafe rewrites its holder line in `vault.lock` every 60 seconds and flushes it. This is the only regular write of an idle mount, and it makes a dead lock handle show within a minute even when nothing else on the drive is used: otherwise, after a dropped session (last row), another PC could mount the vault while this one, idle, kept serving reads from its cache. A failed heartbeat is handled like any failed request (below).
 - **Never close a vault handle because of a network error.** MountSafe keeps the lock handle and every other open vault handle through a drop; closing one would leave an orphaned open on the NAS (third row) and make the lock unavailable even to this PC. Handles are closed only when the file is done with, or at unmount.
 - **Durability comes from flushes only.** A write that returned is not on the NAS until a flush has returned; every step of a commit ends with a flush (6.4), so a drop of any length never makes a commit look complete when it is not.
 - **During a drop,** reads that the cache cannot serve and commits fail with network errors; requests from Windows get I/O errors, data in the write-back cache stays in memory. The vault's row shows *"Connection lost since 21:35 – waiting"* (SPEC-gui 4). MountSafe retries the failed commit when the NAS answers again, as long as the user lets it wait; **Unmount** during a drop drops what is not committed and says which plaintext paths are affected.
 - **When the NAS answers again** (a listing of the vault folder works) and the lock handle works, the mount continues as if nothing happened. If the lock handle still fails then, it is dead: the NAS dropped the session (last row) or the drop outlasted its durable timeout. MountSafe does not wait for it but re-opens the lock at once:
   - **Re-opened:** the lock is free again, but that does not prove that nobody used the vault in the meantime: when the NAS drops a session at once, another PC can mount, change the vault and unmount while this one is cut off. MountSafe therefore reads the vault state before anything else. Its current epoch must be the one this mount wrote last (the last commit, or its own intent of the failed commit):
-    - **The same:** nobody committed in between. MountSafe writes its holder line into the lock again, re-opens the other vault files whose handles are dead, and repeats the failed commit. Nothing is lost.
+    - **The same:** nobody committed in between. MountSafe writes its holder line into the lock again, re-opens the other vault files whose handles are dead, and tries the commit again (with a merged snapshot, 6.4). Nothing is lost.
     - **Another epoch:** another mount has committed since. This mount's index and cache are stale; committing them would overwrite or corrupt the other mount's changes. MountSafe commits nothing, switches the volume to read-only, and tells the user which unsaved changes were not written (plaintext paths) and that the vault was changed elsewhere meanwhile; unmounting and mounting again shows the current vault.
   - **Refused, or failing otherwise:** another PC may have mounted the vault. The volume switches to read-only and MountSafe tells the user which unsaved changes were lost (plaintext paths). An interrupted commit is recovered at the next mount (6.4).
 - **A session that ends during a drop** (crash, kill, power loss) leaves an orphaned lock on the NAS for a few minutes; the next mount on this PC recognises it and waits (6.2 step 2).
@@ -466,7 +471,7 @@ A write to the NAS that fails with `ERROR_DISK_FULL` or `ERROR_HANDLE_DISK_FULL`
 
 - The vault's row shows *"Mounted on P: – the NAS is full; 120 MB of changes are waiting"* (SPEC-gui 4).
 - New writes are refused with `STATUS_DISK_FULL` while the failed commit is pending, so the memory does not fill up and applications see the usual "disk full" error. Reads, renames within the cache and deletes still work; a delete that frees space lets the next commit try again.
-- MountSafe retries the commit every 30 seconds and after every delete. **Unmount** while it is pending drops what is not committed and says which plaintext paths are affected.
+- MountSafe tries again every 30 seconds and after every delete, each time with a merged snapshot whose deletions come first (6.4). **Unmount** while it is pending drops what is not committed and says which plaintext paths are affected.
 - The free space reported to Windows (`GetVolumeInfo`) is the NAS's free space minus the size of the uncommitted changes and their tag tables, minus a reserve for the next state and manifest writes (twice the size of the current vault state plus the largest pending manifest), so that Windows and applications stop before the NAS is completely full.
 
 ## 7. Further functions
@@ -486,7 +491,7 @@ For each known vault: reachable, both header copies structurally valid and ident
 
 ### 7.3 Log
 
-One log file per mount session in a log folder next to the executable (not in the vault). Plaintext paths appear in the log only at `log_level: debug`; at the default level damaged entries are logged by their encrypted name and storage folder.
+One log file per mount session in a log folder next to the executable (not in the vault). Plaintext paths appear in the log only at `log_level: debug`; at the default level damaged entries are logged by their encrypted name and storage folder. MountSafe keeps the logs of the last 30 sessions and deletes older ones at start.
 
 ### 7.4 Damaged entries in version 1
 
@@ -520,7 +525,7 @@ For both:
 
 ### 7.7 One MountSafe per user
 
-Only one MountSafe runs per Windows user at a time: it holds a named mutex `Global\MountSafe-<user SID>`. A second start finds the mutex, brings the running window to the front (a registered window message) and ends. Two instances would overwrite each other's `config.yaml` and `seen_state`, and the orphaned-lock check (6.2 step 2) relies on knowing which MountSafe of this user runs.
+Only one MountSafe runs per Windows user at a time: it holds a named mutex `Global\MountSafe-<user SID>`. A second start finds the mutex, brings the running window to the front (a registered window message) and ends. When the running MountSafe is in another Windows session of the same user (for example a remote desktop session), the window cannot be brought over: the second start says *"MountSafe is already running in another session of this user. Close it there first."* and ends. Two instances would overwrite each other's `config.yaml` and `seen_state`, and the orphaned-lock check (6.2 step 2) relies on knowing which MountSafe of this user runs.
 
 ## 8. Dependencies and project layout
 
@@ -568,7 +573,7 @@ Threat model: the attacker has the vault's files but not its credentials: a copy
 - After an interrupted commit, the pending entries are accepted as found at the next mount (6.4). An attacker who also controls the moment of the crash, or who has an intent from an earlier interrupted commit and a snapshot that matches it, could put older copies of exactly those entries in place. Committed states never accept anything without checking.
 - **Accepting changes** (7.6) accepts every change it covers, including an attacker's: **Accept these changes** the listed findings, **Accept vault as found** everything since the last commit.
 - A power loss of the NAS host can lose the last confirmed changes (4.1, 6.4). The reports it causes look like a rollback by an attacker, and MountSafe cannot tell them apart; after a known power loss, **Accept vault as found** is the usual remedy, and it would also accept an attacker's change made at the same time.
-- Readable without the credentials: in the vault header (5.1), `vault_id`, the creation time, the MountSafe version, chunk size, and per slot its type, label, Argon2id salt and parameters and, for a YubiKey slot, the credential ID and hmac salt (which tie the vault to that YubiKey for someone who also holds it); in `vault.lock`, the host name, user, process ID, process start time and mount time of the current or last mount (6.2). None of these helps to guess a credential.
+- Readable without the credentials: in the vault header (5.1), `vault_id`, the creation time, the MountSafe version, chunk size, and per slot its type, label, Argon2id salt and parameters and, for a YubiKey slot, the credential ID and hmac salt (which tie the vault to that YubiKey for someone who also holds it); in `vault.lock`, the host name, user, process ID, process start time and mount time of the current or last mount (6.2), and through its change time (5.6), refreshed by the heartbeat (6.6), whether a vault is mounted right now. None of these helps to guess a credential.
 - Plaintext outside the vault: while mounted, every process of the user can read the drive. Windows and applications may keep plaintext traces on the local disk (thumbnail cache, recent-files lists, application temp and autosave files). This is the same for VeraCrypt.
 - Key material and plaintext in the PC's memory can reach its disk: the page file, the hibernation file and crash dumps. 10.3 says what MountSafe does against it and what remains.
 
@@ -670,6 +675,8 @@ A tag table that is loaded in parts: per 4 GiB of plaintext a segment of 1 MiB o
 - Timestamps on the NAS: every vault file and storage folder carries the vault time after create, write, rename and delete.
 - Lock: second mount refused and shows the holder; lock released when the process is killed; an orphaned lock is recognised only when the process ID in it is not a running `MountSafe.exe` that started before the lock time (a reused process ID of another program, and a MountSafe started later, both count as not running).
 - Fuzz tests for the header JSON and the name, chunk, tag table, manifest and vault state parsers.
+- Case folding: the built-in table gives the same result on every Windows version; names that differ only in characters whose case mapping Windows versions disagree on are folded alike everywhere (6.2).
+- Create vault: a folder on a MountSafe drive is refused; leftovers of an interrupted creation are recognised and cleared after the question, anything else is not empty (6.1).
 - Format versions: a vault file with a higher format version is reported as "needs a newer MountSafe", never as damaged, and nothing is written; a lower unknown version or an unknown magic is damage.
 - Locked key memory (10.3): V and the derived keys are in the locked buffer, not on the Go heap; the buffer is zeroed at unmount.
 - `config.yaml`: a write interrupted at every point leaves the old or the new file; comments and the user's own lines survive a write (7.1). Vault names outside the allowed characters are refused.
@@ -689,7 +696,9 @@ A tag table that is loaded in parts: per 4 GiB of plaintext a segment of 1 MiB o
 ### 14.3 Failure tests
 
 - Process killed during writes: only the affected files are reported as damaged; all other files read correctly after the next mount.
-- NAS full (6.9), on the in-memory file system: a commit that fails with "disk full" at every single write leaves a valid state; the changes stay in memory; new writes fail with `STATUS_DISK_FULL`; after space is freed, the next commit writes them; the free space reported to Windows never exceeds what the NAS can still take.
+- NAS full (6.9), on the in-memory file system: a commit that fails with "disk full" at every single write leaves a valid state; the changes stay in memory; new writes fail with `STATUS_DISK_FULL`; a delete made after the failure frees space for the merged retry (deletions first, 6.4), which then succeeds; the free space reported to Windows never exceeds what the NAS can still take.
+- Idle mount, session dropped by the NAS, another mount commits and unmounts: the heartbeat finds the dead handle within a minute, the epoch check makes the volume read-only (6.6).
+- Recovery with one torn chunk in a pending file: only that chunk's range fails, the rest of the file reads (6.4).
 - Shutdown and sleep (6.7): a shutdown request during a commit registers the block reason and the commit completes; a shutdown forced in the middle leaves an intent that the next mount recovers; on suspend the commit runs before sleeping, and with `unmount_on_sleep` the vault is unmounted.
 - Power loss of the NAS host, simulated below the vault layer by a file system that drops a random subset of the last confirmed writes (and tears some of them) before the next mount: no data is ever returned as intact when it is not; every lost write shows as a finding of 6.8; **Accept vault as found** makes the vault usable again.
 - NAS connection dropped and restored during writes: for a few seconds (nothing visible), for about a minute (handles reattach, the failed commit is retried, nothing lost), and longer than the NAS's durable timeout or with the session dropped by the NAS (lock re-opened, handles re-opened, the failed commit repeated, nothing lost); lock lost and taken by another PC in between (read-only, lost changes named); session dropped, another PC mounts, commits and unmounts during the drop, then the connection returns: the re-open succeeds, the epoch differs, nothing is committed, read-only with the reason.
